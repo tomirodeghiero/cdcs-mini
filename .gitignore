@@ -1,0 +1,95 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+build/
+dist/
+.eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# CLI output
+report.json
+
+# ---------- Node / Next.js ----------
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+.npm/
+.eslintcache
+.parcel-cache/
+
+# ---------- Environment ----------
+.env
+.env.local
+.env.*.local
+
+# ---------- LaTeX build artifacts ----------
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Editors / IDEs ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- Claude Code (per-user) ----------
+.claude/settings.local.json
+
+# ---------- Temp / scratch ----------
+.tmp_*
+*.tmp
+
+# ---------- docs/ source files (PDFs are the only commit target) ----------
+docs/*.tex
+docs/*.png
+.vercel
