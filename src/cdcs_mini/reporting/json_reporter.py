@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass
 
 from cdcs_mini.domain.diagnostics import Diagnostic
-from cdcs_mini.domain.models import BehaviorStep, FunctionReport, Report
+from cdcs_mini.domain.models import BehaviorStep, Contract, FunctionReport, Report
 from cdcs_mini.reporting.schema import (
     BehaviorStepDict,
     DiagnosticDict,
@@ -49,23 +49,30 @@ class JsonReporter:
         parameters: dict[str, str | None] = {
             p.name: p.annotation for p in fn.signature.parameters
         }
-        contract = fn.contract
+        behavior, examples_count, constraints = self._contract_fields(fn.contract)
         result: FunctionDict = {
             "name": fn.name,
             "status": fn.status,
             "parameters": parameters,
             "returns": fn.signature.returns,
-            "behavior": (
-                [self._behavior_step_to_dict(step) for step in contract.behavior]
-                if contract is not None
-                else []
-            ),
-            "examples": len(contract.examples) if contract is not None else 0,
-            "constraints": list(contract.constraints) if contract is not None else [],
+            "behavior": behavior,
+            "examples": examples_count,
+            "constraints": constraints,
         }
         if fn.diagnostics:
             result["diagnostics"] = [self._diagnostic_to_dict(d) for d in fn.diagnostics]
         return result
+
+    def _contract_fields(
+        self, contract: Contract | None
+    ) -> tuple[list[BehaviorStepDict], int, list[str]]:
+        if contract is None:
+            return [], 0, []
+        return (
+            [self._behavior_step_to_dict(step) for step in contract.behavior],
+            len(contract.examples),
+            list(contract.constraints),
+        )
 
     def _behavior_step_to_dict(self, step: BehaviorStep) -> BehaviorStepDict:
         return {

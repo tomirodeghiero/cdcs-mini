@@ -21,6 +21,7 @@ import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 from rich.box import ROUNDED
 from rich.console import Console
@@ -30,6 +31,7 @@ from rich.table import Table
 from rich.text import Text
 
 from cdcs_mini.application.report_service import ReportService
+from cdcs_mini.domain.diagnostics import Diagnostic
 from cdcs_mini.domain.models import Report
 from cdcs_mini.reporting.json_reporter import JsonReporter
 
@@ -73,30 +75,19 @@ def _run(args: argparse.Namespace) -> int:
     ui = _UI(quiet=args.quiet, no_color=args.no_color)
     input_path: Path = args.input
 
-    if not input_path.is_file():
-        ui.fatal(f"cdcs-mini: input file not found: {input_path}")
-        return 2
-
-    try:
-        source = input_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        ui.fatal(f"cdcs-mini: cannot read {input_path}: {exc}")
+    source = _read_source(input_path, ui)
+    if source is None:
         return 2
 
     ui.banner()
-    file_size = input_path.stat().st_size
-    ui.input_info(input_path, file_size)
+    ui.input_info(input_path, input_path.stat().st_size)
 
     started = time.perf_counter()
     report = ReportService.default().build_report(source, filename=str(input_path))
     elapsed_ms = (time.perf_counter() - started) * 1000
 
     payload = JsonReporter().render(report)
-
-    if args.out is not None:
-        args.out.write_text(payload + "\n", encoding="utf-8")
-    else:
-        sys.stdout.write(payload + "\n")
+    _write_payload(payload, args.out)
 
     ui.analysis_info(report, elapsed_ms)
     ui.summary(report)
@@ -105,6 +96,24 @@ def _run(args: argparse.Namespace) -> int:
     ui.outcome(args.out, len(payload), report)
 
     return 1 if _has_any_diagnostic(report) else 0
+
+
+def _read_source(input_path: Path, ui: _UI) -> str | None:
+    if not input_path.is_file():
+        ui.fatal(f"cdcs-mini: input file not found: {input_path}")
+        return None
+    try:
+        return input_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        ui.fatal(f"cdcs-mini: cannot read {input_path}: {exc}")
+        return None
+
+
+def _write_payload(payload: str, out_path: Path | None) -> None:
+    if out_path is not None:
+        out_path.write_text(payload + "\n", encoding="utf-8")
+    else:
+        sys.stdout.write(payload + "\n")
 
 
 def _has_any_diagnostic(report: Report) -> bool:
@@ -160,16 +169,12 @@ class _UI:
     def summary(self, report: Report) -> None:
         n_fn = len(report.functions)
         n_diag = _total_diagnostics(report)
-        n_constraints = sum(
-            len(fn.contract.constraints) for fn in report.functions if fn.contract is not None
-        )
+        n_constraints = _total_constraints(report)
+        diag_style, diag_glyph = _diag_decorations(n_diag)
 
         table = Table(show_header=False, box=None, padding=(0, 2), expand=False)
         table.add_column(style="bright_white")
         table.add_column()
-
-        diag_style = "bold green" if n_diag == 0 else "bold yellow"
-        diag_glyph = "✅" if n_diag == 0 else "⚠️"
 
         table.add_row("Functions",   Text(str(n_fn), style="bold"))
         table.add_row("Diagnostics", Text(f"{n_diag}  {diag_glyph}", style=diag_style))
@@ -191,24 +196,21 @@ class _UI:
     # --- diagnostics table ------------------------------------------
 
     def diagnostics(self, report: Report) -> None:
-        rows: list[tuple[str | None, str, str | None, str]] = []
-        for d in report.errors:
-            rows.append((None, d.code.value, str(d.line) if d.line is not None else None, d.message))
-        for fn in report.functions:
-            for d in fn.diagnostics:
-                rows.append(
-                    (fn.name, d.code.value, str(d.line) if d.line is not None else None, d.message)
-                )
+        rows = _collect_diagnostic_rows(report)
         if not rows:
             return
+        self._print_diagnostics_header(len(rows))
+        self._print_diagnostics_table(rows)
 
+    def _print_diagnostics_header(self, count: int) -> None:
         header = Text()
-        header.append(f"  ⚠ {len(rows)} diagnostic", style="bold yellow")
-        if len(rows) != 1:
+        header.append(f"  ⚠ {count} diagnostic", style="bold yellow")
+        if count != 1:
             header.append("s", style="bold yellow")
         self._console.print(header)
         self._console.print()
 
+    def _print_diagnostics_table(self, rows: list[_DiagRow]) -> None:
         table = Table(
             show_header=True,
             header_style="bold bright_black",
@@ -221,8 +223,8 @@ class _UI:
         table.add_column("Line", justify="right", style="dim")
         table.add_column("Message")
         table.add_column("Function", style="cyan")
-        for fn_name, code, line, msg in rows:
-            table.add_row(code, line or "—", msg, fn_name or "—")
+        for row in rows:
+            table.add_row(row.code, row.line or "—", row.message, row.fn_name or "—")
         self._console.print(table)
         self._console.print()
 
@@ -285,6 +287,41 @@ def _human_bytes(size: int) -> str:
 
 def _total_diagnostics(report: Report) -> int:
     return len(report.errors) + sum(len(fn.diagnostics) for fn in report.functions)
+
+
+def _total_constraints(report: Report) -> int:
+    return sum(
+        len(fn.contract.constraints) for fn in report.functions if fn.contract is not None
+    )
+
+
+def _diag_decorations(n_diag: int) -> tuple[str, str]:
+    if n_diag == 0:
+        return "bold green", "✅"
+    return "bold yellow", "⚠️"
+
+
+class _DiagRow(NamedTuple):
+    fn_name: str | None
+    code: str
+    line: str | None
+    message: str
+
+
+def _diag_row(fn_name: str | None, diagnostic: Diagnostic) -> _DiagRow:
+    return _DiagRow(
+        fn_name=fn_name,
+        code=diagnostic.code.value,
+        line=str(diagnostic.line) if diagnostic.line is not None else None,
+        message=diagnostic.message,
+    )
+
+
+def _collect_diagnostic_rows(report: Report) -> list[_DiagRow]:
+    rows: list[_DiagRow] = [_diag_row(None, d) for d in report.errors]
+    for fn in report.functions:
+        rows.extend(_diag_row(fn.name, d) for d in fn.diagnostics)
+    return rows
 
 
 if __name__ == "__main__":  # pragma: no cover

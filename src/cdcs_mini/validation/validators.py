@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from typing import Final, Protocol
 
 from cdcs_mini.domain.diagnostics import Diagnostic, DiagnosticCode
-from cdcs_mini.domain.models import Contract, Signature
+from cdcs_mini.domain.models import BehaviorStep, Contract, Signature
 
 # Names that can show up inside DSL expressions and aren't function parameters:
 # every Python builtin plus a small set of matcher keywords (digits, alpha, ...)
@@ -50,18 +50,28 @@ def validate_known_parameters(
     diagnostics: list[Diagnostic] = []
     seen: set[tuple[int, str]] = set()
     for step in contract.behavior:
-        for ref in sorted(step.references):
-            if ref in known or (step.line, ref) in seen:
-                continue
-            seen.add((step.line, ref))
-            diagnostics.append(
-                Diagnostic(
-                    line=step.line,
-                    code=DiagnosticCode.INCONSISTENT_PROMPT,
-                    message=f"unknown parameter: {ref}",
-                )
-            )
+        diagnostics.extend(_unknown_parameter_diagnostics(step, known, seen))
     return diagnostics
+
+
+def _unknown_parameter_diagnostics(
+    step: BehaviorStep,
+    known: frozenset[str],
+    seen: set[tuple[int, str]],
+) -> list[Diagnostic]:
+    found: list[Diagnostic] = []
+    for ref in sorted(step.references):
+        if ref in known or (step.line, ref) in seen:
+            continue
+        seen.add((step.line, ref))
+        found.append(
+            Diagnostic(
+                line=step.line,
+                code=DiagnosticCode.INCONSISTENT_PROMPT,
+                message=f"unknown parameter: {ref}",
+            )
+        )
+    return found
 
 
 DEFAULT_VALIDATORS: Final[tuple[ContractValidator, ...]] = (

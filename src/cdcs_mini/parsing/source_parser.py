@@ -83,17 +83,8 @@ class SourceParser:
                     message="variadic arguments are not supported",
                 )
             )
-
-        parameters: list[Parameter] = []
-        for arg in args.posonlyargs:
-            parameters.append(_to_parameter(arg, "positional_only"))
-        for arg in args.args:
-            parameters.append(_to_parameter(arg, "positional_or_keyword"))
-        for arg in args.kwonlyargs:
-            parameters.append(_to_parameter(arg, "keyword_only"))
-
         return Signature(
-            parameters=tuple(parameters),
+            parameters=_collect_parameters(args),
             returns=_annotation_to_str(node.returns),
             has_variadic=has_variadic,
         )
@@ -102,19 +93,12 @@ class SourceParser:
         self, node: ast.FunctionDef | ast.AsyncFunctionDef
     ) -> tuple[str | None, int | None]:
         raw = ast.get_docstring(node, clean=False)
-        if raw is None or not node.body:
+        if raw is None:
             return None, None
-        first_stmt = node.body[0]
+        first_stmt = node.body[0] if node.body else None
         if not isinstance(first_stmt, ast.Expr):
             return None, None
-
-        dedented = textwrap.dedent(raw).strip("\n")
-        if not dedented.lstrip().startswith(GENERATE_MARKER):
-            return None, None
-
-        # The DSL body starts one line below the @generate marker
-        body = dedented.split(GENERATE_MARKER, 1)[1].lstrip("\n")
-        return body, first_stmt.lineno
+        return _split_generate_body(raw, first_stmt.lineno)
 
 
 def _to_parameter(arg: ast.arg, kind: ParameterKind) -> Parameter:
@@ -123,3 +107,20 @@ def _to_parameter(arg: ast.arg, kind: ParameterKind) -> Parameter:
 
 def _annotation_to_str(node: ast.expr | None) -> str | None:
     return None if node is None else ast.unparse(node)
+
+
+def _collect_parameters(args: ast.arguments) -> tuple[Parameter, ...]:
+    return (
+        *(_to_parameter(a, "positional_only") for a in args.posonlyargs),
+        *(_to_parameter(a, "positional_or_keyword") for a in args.args),
+        *(_to_parameter(a, "keyword_only") for a in args.kwonlyargs),
+    )
+
+
+def _split_generate_body(raw: str, lineno: int) -> tuple[str | None, int | None]:
+    dedented = textwrap.dedent(raw).strip("\n")
+    if not dedented.lstrip().startswith(GENERATE_MARKER):
+        return None, None
+    # The DSL body starts one line below the @generate marker
+    body = dedented.split(GENERATE_MARKER, 1)[1].lstrip("\n")
+    return body, lineno

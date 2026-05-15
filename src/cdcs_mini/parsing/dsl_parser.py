@@ -90,41 +90,58 @@ def _split_sections(body: str, *, base_line: int) -> _SplitResult:
     sections: SectionLines = {}
     diagnostics: list[Diagnostic] = []
     current: str | None = None
-
     for offset, raw_line in enumerate(body.splitlines()):
-        absolute = base_line + offset
         stripped = raw_line.strip()
         if not stripped:
             continue
-
+        absolute = base_line + offset
         header = _match_section_header(stripped)
         if header is not None:
-            if header not in KNOWN_SECTIONS:
-                diagnostics.append(_malformed(absolute, f"unknown section: {header}"))
-                current = None
-                continue
-            sections.setdefault(header, [])
-            current = header
-            continue
-
-        if current is None:
-            diagnostics.append(
-                _malformed(absolute, f"content outside any section: {stripped!r}")
-            )
-            continue
-
-        sections[current].append(_Line(text=stripped, line=absolute))
-
+            current = _enter_section(header, absolute, sections, diagnostics)
+        else:
+            _record_line(stripped, absolute, current, sections, diagnostics)
     return _SplitResult(sections=sections, diagnostics=tuple(diagnostics))
+
+
+def _enter_section(
+    header: str,
+    absolute: int,
+    sections: SectionLines,
+    diagnostics: list[Diagnostic],
+) -> str | None:
+    if header not in KNOWN_SECTIONS:
+        diagnostics.append(_malformed(absolute, f"unknown section: {header}"))
+        return None
+    sections.setdefault(header, [])
+    return header
+
+
+def _record_line(
+    stripped: str,
+    absolute: int,
+    current: str | None,
+    sections: SectionLines,
+    diagnostics: list[Diagnostic],
+) -> None:
+    if current is None:
+        diagnostics.append(
+            _malformed(absolute, f"content outside any section: {stripped!r}")
+        )
+        return
+    sections[current].append(_Line(text=stripped, line=absolute))
 
 
 def _match_section_header(stripped: str) -> str | None:
     if not stripped.endswith(":"):
         return None
     candidate = stripped[:-1].strip()
-    if not candidate or any(ch.isspace() for ch in candidate):
+    if not _is_valid_section_name(candidate):
         return None
     return candidate.lower()
+
+
+def _is_valid_section_name(candidate: str) -> bool:
+    return bool(candidate) and not any(ch.isspace() for ch in candidate)
 
 
 def _parse_behavior(lines: list[_Line]) -> _BehaviorBatch:
@@ -260,20 +277,33 @@ def _extract_require_references(payload: str) -> frozenset[str] | None:
 
 
 def _extract_names(expression: str) -> frozenset[str] | None:
-    try:
-        tree = ast.parse(expression, mode="eval")
-    except SyntaxError:
+    tree = _try_parse_eval(expression)
+    if tree is None:
         return None
     # Skip names that sit in Call.func — those are operations (strip, int, ...) not parameters
-    call_func_ids = {
+    return _names_excluding(tree, _call_func_node_ids(tree))
+
+
+def _try_parse_eval(expression: str) -> ast.Expression | None:
+    try:
+        return ast.parse(expression, mode="eval")
+    except SyntaxError:
+        return None
+
+
+def _call_func_node_ids(tree: ast.AST) -> set[int]:
+    return {
         id(node.func)
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
+
+
+def _names_excluding(tree: ast.AST, exclude_ids: set[int]) -> frozenset[str]:
     return frozenset(
         node.id
         for node in ast.walk(tree)
-        if isinstance(node, ast.Name) and id(node) not in call_func_ids
+        if isinstance(node, ast.Name) and id(node) not in exclude_ids
     )
 
 
