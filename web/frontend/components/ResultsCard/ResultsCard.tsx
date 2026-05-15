@@ -19,13 +19,13 @@ export function ResultsCard({ report }: Props) {
   const reportId = useReportId(json);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+    <section className="flex h-full min-h-[28rem] flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:min-h-0 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
       <Header
         status={report ? (stats.diagnostics === 0 ? "clean" : "issues") : "idle"}
         diagnostics={stats.diagnostics}
       />
 
-      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid shrink-0 grid-cols-3 gap-2 sm:gap-3">
         <MetricCard
           tone="indigo"
           label="Functions"
@@ -51,7 +51,7 @@ export function ResultsCard({ report }: Props) {
 
       <DiagnosticsList report={report} />
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-[18rem] flex-1 flex-col sm:min-h-0">
         <h3 className="mb-2 shrink-0 text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           JSON report
         </h3>
@@ -60,10 +60,12 @@ export function ResultsCard({ report }: Props) {
         </div>
       </div>
 
-      <footer className="flex shrink-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <footer className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
         <HashIcon />
         <span>Deterministic report ID:</span>
-        <code className="font-mono text-slate-700 dark:text-slate-200">{reportId}</code>
+        <code className="min-w-0 truncate font-mono text-slate-700 dark:text-slate-200">
+          {reportId}
+        </code>
       </footer>
     </section>
   );
@@ -153,21 +155,21 @@ function MetricCard({
     emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300",
   };
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
-      <div className="flex items-center gap-3">
-        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${palette[tone]}`}>
+    <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9 ${palette[tone]}`}>
           {icon}
         </span>
-        <div className="flex flex-col gap-1">
-          <div className="text-xs font-medium uppercase leading-none tracking-wide text-slate-500 dark:text-slate-400">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="truncate text-[10px] font-medium uppercase leading-none tracking-wide text-slate-500 sm:text-xs dark:text-slate-400">
             {label}
           </div>
-          <div className="text-2xl font-semibold leading-none tabular-nums text-slate-900 dark:text-slate-50">
+          <div className="text-xl font-semibold leading-none tabular-nums text-slate-900 sm:text-2xl dark:text-slate-50">
             {value}
           </div>
         </div>
       </div>
-      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{caption}</div>
+      <div className="mt-2 hidden text-xs text-slate-500 sm:block dark:text-slate-400">{caption}</div>
     </div>
   );
 }

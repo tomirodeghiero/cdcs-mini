@@ -51,13 +51,13 @@ export function SourceCard(props: Props) {
   const canSubmit = source.trim().length > 0;
 
   return (
-    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+    <section className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-h-0 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
       <Tabs mode={mode} onChange={setMode} />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-5">
         <DropZone onFileLoaded={props.onFileLoaded} />
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-[18rem] flex-1 flex-col sm:min-h-0">
           {/* Monaco stays mounted across tabs; we toggle visibility so the
               editor never re-initializes and never flashes "Loading…" */}
           <div className={mode === "paste" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
@@ -105,12 +105,14 @@ export function SourceCard(props: Props) {
 
 function Tabs({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
   return (
-    <div className="flex items-center gap-1 border-b border-slate-200 px-3 pt-3 dark:border-white/10">
+    <div className="flex items-center gap-1 border-b border-slate-200 px-2 pt-2 sm:px-3 sm:pt-3 dark:border-white/10">
       <Tab active={mode === "upload"} onClick={() => onChange("upload")} icon={<UploadIcon />}>
-        Upload .py file
+        <span className="sm:hidden">Upload</span>
+        <span className="hidden sm:inline">Upload .py file</span>
       </Tab>
       <Tab active={mode === "paste"} onClick={() => onChange("paste")} icon={<CodeIcon />}>
-        Paste source code
+        <span className="sm:hidden">Paste</span>
+        <span className="hidden sm:inline">Paste source code</span>
       </Tab>
     </div>
   );
@@ -178,23 +180,26 @@ function DropZone({ onFileLoaded }: { onFileLoaded: Props["onFileLoaded"] }) {
         setHovered(false);
       }}
       onDrop={handleDrop}
-      className={`flex cursor-pointer items-center gap-4 rounded-xl border border-dashed px-5 py-5 transition ${
+      className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-4 transition sm:gap-4 sm:px-5 sm:py-5 ${
         hovered
           ? "border-indigo-400 bg-indigo-50/50 dark:border-indigo-400/60 dark:bg-indigo-500/10"
           : "border-slate-200 bg-slate-50/60 hover:border-indigo-300 hover:bg-indigo-50/40 dark:border-white/10 dark:bg-white/[0.02] dark:hover:border-indigo-400/40 dark:hover:bg-indigo-500/5"
       }`}
     >
-      <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow shadow-indigo-200 dark:shadow-indigo-500/30">
+      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow shadow-indigo-200 dark:shadow-indigo-500/30">
         <CloudUploadIcon />
       </span>
-      <div className="text-sm leading-relaxed">
+      <div className="min-w-0 text-sm leading-relaxed">
         <div className="text-slate-700 dark:text-slate-200">
           <span className="font-medium text-slate-900 dark:text-slate-50">
-            Drag and drop a .py file here
+            <span className="sm:hidden">Tap to upload a .py file</span>
+            <span className="hidden sm:inline">Drag and drop a .py file here</span>
           </span>
-          , or{" "}
-          <span className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-300">
-            click to browse
+          <span className="hidden sm:inline">
+            , or{" "}
+            <span className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-300">
+              click to browse
+            </span>
           </span>
         </div>
         <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -229,14 +234,14 @@ function CodeArea({
 }) {
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950/60 dark:shadow-none">
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/60">
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/60">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <span className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
           <input
             value={filename}
             onChange={(e) => onFilenameChange(e.target.value)}
             spellCheck={false}
-            className="w-32 bg-transparent font-mono text-xs text-slate-700 focus:outline-none dark:text-slate-200"
+            className="w-full min-w-0 max-w-[14rem] bg-transparent font-mono text-xs text-slate-700 focus:outline-none dark:text-slate-200"
           />
         </div>
         <button

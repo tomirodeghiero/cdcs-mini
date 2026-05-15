@@ -37,18 +37,19 @@ export default function HomePage() {
   }
 
   return (
-    // h-screen + flex-col: Navbar / main / Footer stack to the viewport
-    <div className="flex h-screen flex-col">
+    // Mobile/tablet: natural-height stacked layout that scrolls the page
+    // lg+: lock to viewport so the editor and JSON panes scroll inside their cards
+    <div className="flex min-h-screen flex-col lg:h-screen">
       <Navbar />
-      <main className="flex-1 overflow-hidden">
-        <div className="mx-auto flex h-full max-w-7xl flex-col gap-4 px-6 py-5">
+      <main className="flex-1 lg:overflow-hidden">
+        <div className="mx-auto flex h-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
           {error && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
               {error}
             </div>
           )}
           {/* min-h-0 lets the grid shrink so the cards' internal flex layouts get a finite height */}
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
             <SourceCard
               source={source}
               filename={filename}
@@ -70,7 +71,7 @@ export default function HomePage() {
 function Footer() {
   return (
     <footer className="shrink-0 border-t border-slate-200 bg-white/70 backdrop-blur dark:border-white/5 dark:bg-slate-950/70">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="leading-tight">
           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             CDCS Mini
@@ -90,13 +91,13 @@ function Footer() {
             alt="Universidad Nacional de Río Cuarto"
             width={24}
             height={32}
-            className="h-9 w-auto"
+            className="h-9 w-auto shrink-0"
           />
-          <div className="leading-tight">
-            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
               Universidad Nacional de Río Cuarto
             </div>
-            <div className="text-[11px] text-slate-400 dark:text-slate-500">
+            <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">
               Tomás Rodeghiero · challenge by Daniel Gutson
             </div>
           </div>
