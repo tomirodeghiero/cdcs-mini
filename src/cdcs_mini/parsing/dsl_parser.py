@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, NamedTuple
 
 from cdcs_mini.domain.diagnostics import Diagnostic, DiagnosticCode
 from cdcs_mini.domain.models import (
@@ -39,30 +39,55 @@ class _Line:
     text: str
     line: int
 
+Diagnostics = tuple[Diagnostic, ...]
+SectionLines = dict[str, list[_Line]]
+
+
+class _SplitResult(NamedTuple):
+    sections: SectionLines
+    diagnostics: Diagnostics
+
+
+class _BehaviorLineResult(NamedTuple):
+    step: BehaviorStep | None
+    diagnostic: Diagnostic | None
+
+
+class _ExampleLineResult(NamedTuple):
+    example: Example | None
+    diagnostic: Diagnostic | None
+
+
+class _BehaviorBatch(NamedTuple):
+    steps: tuple[BehaviorStep, ...]
+    diagnostics: Diagnostics
+
+
+class _ExampleBatch(NamedTuple):
+    examples: tuple[Example, ...]
+    diagnostics: Diagnostics
+
 
 class DSLParser:
     def parse(self, body: str, *, base_line: int) -> DSLParseResult:
-        sections, section_diagnostics = _split_sections(body, base_line=base_line)
-
-        behavior, behavior_diagnostics = _parse_behavior(sections.get("behavior", []))
-        examples, example_diagnostics = _parse_examples(sections.get("examples", []))
-        constraints = tuple(item.text for item in sections.get("constraints", []))
+        split = _split_sections(body, base_line=base_line)
+        behavior = _parse_behavior(split.sections.get("behavior", []))
+        examples = _parse_examples(split.sections.get("examples", []))
+        constraints = tuple(item.text for item in split.sections.get("constraints", []))
 
         return DSLParseResult(
             contract=Contract(
-                behavior=behavior,
-                examples=examples,
+                behavior=behavior.steps,
+                examples=examples.examples,
                 constraints=constraints,
-                has_examples_section="examples" in sections,
+                has_examples_section="examples" in split.sections,
             ),
-            diagnostics=(*section_diagnostics, *behavior_diagnostics, *example_diagnostics),
+            diagnostics=(*split.diagnostics, *behavior.diagnostics, *examples.diagnostics),
         )
 
 
-def _split_sections(
-    body: str, *, base_line: int
-) -> tuple[dict[str, list[_Line]], tuple[Diagnostic, ...]]:
-    sections: dict[str, list[_Line]] = {}
+def _split_sections(body: str, *, base_line: int) -> _SplitResult:
+    sections: SectionLines = {}
     diagnostics: list[Diagnostic] = []
     current: str | None = None
 
@@ -90,7 +115,7 @@ def _split_sections(
 
         sections[current].append(_Line(text=stripped, line=absolute))
 
-    return sections, tuple(diagnostics)
+    return _SplitResult(sections=sections, diagnostics=tuple(diagnostics))
 
 
 def _match_section_header(stripped: str) -> str | None:
@@ -102,36 +127,32 @@ def _match_section_header(stripped: str) -> str | None:
     return candidate.lower()
 
 
-def _parse_behavior(
-    lines: list[_Line],
-) -> tuple[tuple[BehaviorStep, ...], tuple[Diagnostic, ...]]:
+def _parse_behavior(lines: list[_Line]) -> _BehaviorBatch:
     steps: list[BehaviorStep] = []
     diagnostics: list[Diagnostic] = []
     for line in lines:
-        step, diagnostic = _parse_behavior_line(line)
-        if step is not None:
-            steps.append(step)
-        if diagnostic is not None:
-            diagnostics.append(diagnostic)
-    return tuple(steps), tuple(diagnostics)
+        result = _parse_behavior_line(line)
+        if result.step is not None:
+            steps.append(result.step)
+        if result.diagnostic is not None:
+            diagnostics.append(result.diagnostic)
+    return _BehaviorBatch(steps=tuple(steps), diagnostics=tuple(diagnostics))
 
 
-def _parse_examples(
-    lines: list[_Line],
-) -> tuple[tuple[Example, ...], tuple[Diagnostic, ...]]:
+def _parse_examples(lines: list[_Line]) -> _ExampleBatch:
     examples: list[Example] = []
     diagnostics: list[Diagnostic] = []
     for line in lines:
-        example, diagnostic = _parse_example_line(line)
-        if example is not None:
-            examples.append(example)
-        if diagnostic is not None:
-            diagnostics.append(diagnostic)
-    return tuple(examples), tuple(diagnostics)
+        result = _parse_example_line(line)
+        if result.example is not None:
+            examples.append(result.example)
+        if result.diagnostic is not None:
+            diagnostics.append(result.diagnostic)
+    return _ExampleBatch(examples=tuple(examples), diagnostics=tuple(diagnostics))
 
 
 Matcher = Callable[[str], bool]
-LineParser = Callable[[str, "_Line"], tuple[BehaviorStep | None, Diagnostic | None]]
+LineParser = Callable[[str, "_Line"], _BehaviorLineResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,41 +183,41 @@ BEHAVIOR_RULES: Final[tuple[_BehaviorRule, ...]] = (
 )
 
 
-def _parse_behavior_line(line: _Line) -> tuple[BehaviorStep | None, Diagnostic | None]:
+def _parse_behavior_line(line: _Line) -> _BehaviorLineResult:
     for rule in BEHAVIOR_RULES:
         if rule.matches(line.text):
             return rule.parse(line.text, line)
     raise AssertionError("unreachable: the last rule is a catch-all")
 
 
-def _parse_require(text: str, line: _Line) -> tuple[BehaviorStep | None, Diagnostic | None]:
+def _parse_require(text: str, line: _Line) -> _BehaviorLineResult:
     payload = "" if text == "require" else text[len(REQUIRE_PREFIX) :].strip()
     if not payload:
-        return None, _malformed(line.line, "empty require clause")
+        return _behavior_error(line, "empty require clause")
     references = _extract_require_references(payload)
     if references is None:
-        return None, _malformed(line.line, f"unparseable require clause: {payload!r}")
-    return _step(BehaviorKind.REQUIRE, text, line, references), None
+        return _behavior_error(line, f"unparseable require clause: {payload!r}")
+    return _behavior_ok(BehaviorKind.REQUIRE, text, line, references)
 
 
-def _parse_return(text: str, line: _Line) -> tuple[BehaviorStep | None, Diagnostic | None]:
+def _parse_return(text: str, line: _Line) -> _BehaviorLineResult:
     payload = "" if text == "return" else text[len(RETURN_PREFIX) :].strip()
     if not payload:
-        return _step(BehaviorKind.RETURN, text, line, frozenset()), None
+        return _behavior_ok(BehaviorKind.RETURN, text, line, frozenset())
     references = _extract_names(payload)
     if references is None:
-        return None, _malformed(line.line, f"unparseable return expression: {payload!r}")
-    return _step(BehaviorKind.RETURN, text, line, references), None
+        return _behavior_error(line, f"unparseable return expression: {payload!r}")
+    return _behavior_ok(BehaviorKind.RETURN, text, line, references)
 
 
-def _parse_operation(text: str, line: _Line) -> tuple[BehaviorStep | None, Diagnostic | None]:
+def _parse_operation(text: str, line: _Line) -> _BehaviorLineResult:
     references = _extract_names(text)
     if references is None:
-        return None, _malformed(line.line, f"unparseable behavior expression: {text!r}")
-    return _step(BehaviorKind.OPERATION, text, line, references), None
+        return _behavior_error(line, f"unparseable behavior expression: {text!r}")
+    return _behavior_ok(BehaviorKind.OPERATION, text, line, references)
 
 
-def _parse_example_line(line: _Line) -> tuple[Example | None, Diagnostic | None]:
+def _parse_example_line(line: _Line) -> _ExampleLineResult:
     text = line.text
     if RAISES_KEYWORD in text:
         call_part, _ = text.split(RAISES_KEYWORD, 1)
@@ -205,14 +226,29 @@ def _parse_example_line(line: _Line) -> tuple[Example | None, Diagnostic | None]
         call_part, _ = text.split(EQUALS_OP, 1)
         kind = ExampleKind.EQUALS
     else:
-        return None, _invalid_example(line.line, f"example must use '==' or 'raises': {text!r}")
+        return _example_error(line, f"example must use '==' or 'raises': {text!r}")
 
     call_target = _extract_call_target(call_part.strip())
     if call_target is None:
-        return None, _invalid_example(
-            line.line, f"example must call the target function: {text!r}"
-        )
-    return Example(kind=kind, raw=text, line=line.line, call_target=call_target), None
+        return _example_error(line, f"example must call the target function: {text!r}")
+    return _ExampleLineResult(
+        example=Example(kind=kind, raw=text, line=line.line, call_target=call_target),
+        diagnostic=None,
+    )
+
+
+def _behavior_ok(
+    kind: BehaviorKind, text: str, line: _Line, references: frozenset[str]
+) -> _BehaviorLineResult:
+    return _BehaviorLineResult(step=_step(kind, text, line, references), diagnostic=None)
+
+
+def _behavior_error(line: _Line, message: str) -> _BehaviorLineResult:
+    return _BehaviorLineResult(step=None, diagnostic=_malformed(line.line, message))
+
+
+def _example_error(line: _Line, message: str) -> _ExampleLineResult:
+    return _ExampleLineResult(example=None, diagnostic=_invalid_example(line.line, message))
 
 
 def _extract_require_references(payload: str) -> frozenset[str] | None:
