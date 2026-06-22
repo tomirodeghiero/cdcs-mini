@@ -3,6 +3,7 @@
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 
 import {
+  BookIcon,
   CloudUploadIcon,
   CodeIcon,
   InfoIcon,
@@ -10,6 +11,7 @@ import {
   Spinner,
   UploadIcon,
 } from "@/components/icons";
+import { SyntaxHelp } from "@/components/SyntaxHelp";
 
 import { CodeEditor } from "./CodeEditor";
 import { PYTHON_SAMPLE, TS_SAMPLE } from "./samples";
@@ -44,6 +46,7 @@ export function swapFilenameExtension(filename: string, next: SourceLanguage): s
 export function SourceCard(props: Props) {
   const { source, filename, language, loading, actionMode } = props;
   const [mode, setMode] = useState<Mode>("paste");
+  const [helpOpen, setHelpOpen] = useState(false);
   const cmdKey = useCmdKey();
 
   const canSubmit = source.trim().length > 0;
@@ -77,6 +80,7 @@ export function SourceCard(props: Props) {
               onLoadExample={() =>
                 props.onSourceChange(language === "typescript" ? TS_SAMPLE : PYTHON_SAMPLE)
               }
+              onOpenHelp={() => setHelpOpen(true)}
               onSubmit={props.onSubmit}
             />
           </div>
@@ -116,6 +120,12 @@ export function SourceCard(props: Props) {
           </button>
         </div>
       </div>
+      <SyntaxHelp
+        open={helpOpen}
+        language={language}
+        onClose={() => setHelpOpen(false)}
+        onLoadSnippet={props.onSourceChange}
+      />
     </section>
   );
 }
@@ -242,6 +252,7 @@ function CodeArea({
   language,
   onLanguageChange,
   onLoadExample,
+  onOpenHelp,
   onSubmit,
 }: {
   value: string;
@@ -251,6 +262,7 @@ function CodeArea({
   language: SourceLanguage;
   onLanguageChange: (next: SourceLanguage) => void;
   onLoadExample: () => void;
+  onOpenHelp: () => void;
   onSubmit: () => void;
 }) {
   return (
@@ -270,6 +282,15 @@ function CodeArea({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <LanguageToggle value={language} onChange={onLanguageChange} />
+          <button
+            type="button"
+            onClick={onOpenHelp}
+            title="Syntax reference & loadable examples"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300"
+          >
+            <BookIcon className="h-3.5 w-3.5" />
+            <span>Syntax</span>
+          </button>
           <button
             type="button"
             onClick={onLoadExample}

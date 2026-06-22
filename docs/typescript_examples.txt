@@ -1,0 +1,291 @@
+================================================================
+EJEMPLOS VÁLIDOS DE TYPESCRIPT PARA EL CDCS COMPILER
+================================================================
+
+Todos pasan el analyzer limpio (sin diagnósticos) y respetan el
+contrato @generate. Estructura: behavior / examples / constraints
+(+ calls/reads si la función es método de clase).
+
+Probar cualquier ejemplo guardándolo en un .ts y corriendo:
+
+    cdcs-mini path/to/file.ts
+
+
+----------------------------------------------------------------
+1) Validar puerto TCP/UDP
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   strip(value)
+ *   require value matches digits
+ *   require 1 <= parseInt(value) <= 65535
+ *   return parseInt(value)
+ *
+ * examples:
+ *   parsePort("80") == 80
+ *   parsePort("443") == 443
+ *   parsePort("0") raises ValueError
+ *   parsePort("abc") raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function parsePort(value: string): number {
+  return 0;
+}
+
+
+----------------------------------------------------------------
+2) Reverse de un string
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   return value.split("").reverse().join("")
+ *
+ * examples:
+ *   reverseString("abc") == "cba"
+ *   reverseString("") == ""
+ *   reverseString("a") == "a"
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function reverseString(value: string): string {
+  return "";
+}
+
+
+----------------------------------------------------------------
+3) Clamp numérico
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   require min <= max
+ *   return Math.min(Math.max(value, min), max)
+ *
+ * examples:
+ *   clamp(5, 0, 10) == 5
+ *   clamp(-3, 0, 10) == 0
+ *   clamp(99, 0, 10) == 10
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function clamp(value: number, min: number, max: number): number {
+  return 0;
+}
+
+
+----------------------------------------------------------------
+4) Email check
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   strip(email)
+ *   require email matches emailPattern
+ *   return true
+ *
+ * examples:
+ *   isValidEmail("foo@bar.com") == true
+ *   isValidEmail("nope") raises ValueError
+ *   isValidEmail("") raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function isValidEmail(email: string): boolean {
+  return false;
+}
+
+
+----------------------------------------------------------------
+5) Slugify
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   strip(text)
+ *   require text.length > 0
+ *   return text.toLowerCase().replace(/\s+/g, "-")
+ *
+ * examples:
+ *   slugify("Hello World") == "hello-world"
+ *   slugify("  Foo  Bar  ") == "foo-bar"
+ *   slugify("") raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function slugify(text: string): string {
+  return "";
+}
+
+
+----------------------------------------------------------------
+6) Suma con guardas
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   require Number.isInteger(a)
+ *   require Number.isInteger(b)
+ *   return a + b
+ *
+ * examples:
+ *   safeAdd(1, 2) == 3
+ *   safeAdd(0, 0) == 0
+ *   safeAdd(1.5, 2) raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function safeAdd(a: number, b: number): number {
+  return 0;
+}
+
+
+----------------------------------------------------------------
+7) Pick a key (con default)
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   require key.length > 0
+ *   return source[key]
+ *
+ * examples:
+ *   pick({"a": 1}, "a") == 1
+ *   pick({"a": 1}, "b") == undefined
+ *   pick({}, "") raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function pick(source: Record<string, number>, key: string): number {
+  return 0;
+}
+
+
+----------------------------------------------------------------
+8) Truncar string con elipsis
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   require maxLen >= 1
+ *   return text.length <= maxLen ? text : text.slice(0, maxLen) + "…"
+ *
+ * examples:
+ *   truncate("hello", 10) == "hello"
+ *   truncate("hello world", 5) == "hello…"
+ *   truncate("x", 0) raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function truncate(text: string, maxLen: number): string {
+  return "";
+}
+
+
+----------------------------------------------------------------
+9) Método de clase con calls: y reads:
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   require ttlSeconds > 0
+ *   return this._sign(String(userId))
+ *
+ * examples:
+ *   issue(42, 60) == "signed:42"
+ *   issue(1, 0) raises ValueError
+ *   issue(7, -1) raises ValueError
+ *
+ * calls:
+ *   self._sign(payload: string) -> string    # HMAC del payload
+ *   self._now() -> number                     # epoch seconds
+ *
+ * reads:
+ *   self.secretKey: Uint8Array                # usado por _sign
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function issue(this: TokenService, userId: number, ttlSeconds: number): string {
+  return "";
+}
+
+
+----------------------------------------------------------------
+10) Boolean parser tolerante
+----------------------------------------------------------------
+
+/**
+ * @generate
+ * behavior:
+ *   strip(value)
+ *   require value.length > 0
+ *   return value.toLowerCase() === "true"
+ *
+ * examples:
+ *   parseBool("true") == true
+ *   parseBool("TRUE") == true
+ *   parseBool("false") == false
+ *   parseBool("") raises ValueError
+ *
+ * constraints:
+ *   no_imports
+ *   no_network
+ *   no_filesystem
+ */
+export function parseBool(value: string): boolean {
+  return false;
+}
+
+
+================================================================
+NOTAS
+================================================================
+
+- examples: es OBLIGATORIO. Sin él se dispara MissingSamplesError.
+- Todos los parámetros que aparezcan en behavior/examples deben
+  estar declarados en la firma, sino: InconsistentPromptError.
+- No usar ...rest params: dispara UnsupportedSignatureError.
+- Los ejemplos deben tener forma `f(args) == value` o
+  `f(args) raises ValueError`, sino InvalidExampleError.
+- Si un parámetro es contenedor (string/array/object), conviene
+  un ejemplo del caso vacío para no caer en IncompletePromptError.
+- En métodos de clase, todo `this.X` usado en el behavior debe
+  estar declarado en `calls:` o `reads:`.

@@ -162,6 +162,16 @@ export function LogoMarkIcon({ className = "h-4 w-4" }: IconProps) {
   );
 }
 
+export function BookIcon({ className = "h-3.5 w-3.5" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2V5z" strokeLinejoin="round" />
+      <path d="M4 19a2 2 0 0 1 2-2h12" strokeLinecap="round" />
+      <path d="M8 7h6M8 11h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function DocumentIcon({ className = "h-8 w-8" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={`${base} ${className}`} fill="none" stroke="currentColor" strokeWidth="1.6">
