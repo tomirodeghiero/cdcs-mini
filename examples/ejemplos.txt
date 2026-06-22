@@ -1,0 +1,351 @@
+==============================================================
+cdcs-mini — ejemplos para correr
+==============================================================
+
+Cada bloque es un archivo Python que podés pegar en
+examples/<nombre>.py y procesar con:
+
+    uv run cdcs-mini examples/<nombre>.py
+
+Para ver el JSON pretty:
+
+    uv run cdcs-mini examples/<nombre>.py | jq .
+
+Para guardar el reporte:
+
+    uv run cdcs-mini examples/<nombre>.py --out report.json
+
+Exit codes:
+    0 = limpio  ·  1 = diagnósticos detectados  ·  2 = error de uso
+
+==============================================================
+EJEMPLO 1 — caso feliz: contrato completo, sin diagnósticos
+archivo: examples/01_parse_port.py
+exit code esperado: 0
+==============================================================
+def parse_port(value: str) -> int:
+    """@generate
+    behavior:
+      strip(value)
+      require value matches digits
+      require 1 <= int(value) <= 65535
+      return int(value)
+
+    examples:
+      parse_port("80") == 80
+      parse_port("443") == 443
+      parse_port("0") raises ValueError
+
+    constraints:
+      no_imports
+      no_network
+      no_filesystem
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 2 — múltiples funciones en el mismo archivo
+archivo: examples/02_string_utils.py
+exit code esperado: 0
+==============================================================
+def slugify(text: str) -> str:
+    """@generate
+    behavior:
+      strip(text)
+      lowercase(text)
+      replace_spaces_with_dash(text)
+      return text
+
+    examples:
+      slugify("Hola Mundo") == "hola-mundo"
+      slugify("  Foo  Bar  ") == "foo-bar"
+      slugify("") == ""
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+def reverse_words(sentence: str) -> str:
+    """@generate
+    behavior:
+      split(sentence)
+      reverse(words)
+      join(words)
+      return result
+
+    examples:
+      reverse_words("hello world") == "world hello"
+      reverse_words("a") == "a"
+      reverse_words("") == ""
+
+    constraints:
+      no_network
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 3 — error MissingSamplesError (sin sección examples)
+archivo: examples/03_missing_examples.py
+exit code esperado: 1
+==============================================================
+def double(n: int) -> int:
+    """@generate
+    behavior:
+      return n * 2
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 4 — error InconsistentPromptError (referencia a
+parámetro inexistente)
+archivo: examples/04_unknown_param.py
+exit code esperado: 1
+==============================================================
+def add(a: int, b: int) -> int:
+    """@generate
+    behavior:
+      require a > 0
+      require c > 0          # <-- "c" no es parámetro
+      return a + b
+
+    examples:
+      add(1, 2) == 3
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 5 — error UnsupportedSignatureError (*args/**kwargs)
+archivo: examples/05_variadic.py
+exit code esperado: 1
+==============================================================
+def sum_all(*nums: int) -> int:
+    """@generate
+    behavior:
+      return sum(nums)
+
+    examples:
+      sum_all(1, 2, 3) == 6
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 6 — error InvalidExampleError (ejemplo sin == ni raises)
+archivo: examples/06_invalid_example.py
+exit code esperado: 1
+==============================================================
+def square(n: int) -> int:
+    """@generate
+    behavior:
+      return n * n
+
+    examples:
+      square(2)                # <-- falta "== valor" o "raises ..."
+      square(3) == 9
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 7 — error MalformedDSLError (sección desconocida)
+archivo: examples/07_malformed.py
+exit code esperado: 1
+==============================================================
+def greet(name: str) -> str:
+    """@generate
+    behavior:
+      return "hola " + name
+
+    examples:
+      greet("Tomi") == "hola Tomi"
+
+    weirdsection:                # <-- sección inválida
+      foo
+      bar
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 8 — error ContradictoryExamplesError
+archivo: examples/08_contradictory.py
+exit code esperado: 1
+
+Nota: la DSL de behavior NO acepta bloques Python (if/else, for,
+asignaciones). Cada paso es: operación (expresión), `require ...`
+o `return ...`. Para casos con ramas, expresá la condición en
+`require` o usá una expresión condicional dentro del return.
+==============================================================
+def absolute(n: int) -> int:
+    """@generate
+    behavior:
+      return -n if n < 0 else n
+
+    examples:
+      absolute(-5) == 5
+      absolute(-5) == 10        # <-- mismos args, distinto resultado
+      absolute(3) == 3
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 9 — error IncompletePromptError (lista sin ejemplo vacío)
+archivo: examples/09_no_empty_case.py
+exit code esperado: 1
+==============================================================
+def first_or_none(items: list[int]) -> int | None:
+    """@generate
+    behavior:
+      return items[0] if items else None
+
+    examples:
+      first_or_none([1, 2, 3]) == 1
+      first_or_none([42]) == 42
+      # falta el caso de lista vacía -> warning
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 10 — método con calls:/reads: (clase)
+archivo: examples/10_token_service.py
+exit code esperado: 0
+==============================================================
+class TokenService:
+    def issue(self, user_id: int, ttl_seconds: int) -> str:
+        """@generate
+        behavior:
+          require ttl_seconds > 0
+          return self._sign(str(user_id))
+
+        examples:
+          issue(42, 60) == "signed:42"
+          issue(1, 0) raises ValueError
+
+        calls:
+          self._sign(payload: str) -> str    # HMAC del payload
+          self._now() -> int                  # epoch seconds
+
+        reads:
+          self.secret_key: bytes
+
+        constraints:
+          no_network
+          no_filesystem
+        """
+        ...
+
+
+==============================================================
+EJEMPLO 11 — error InconsistentCallableSurfaceError
+(función sin self pero declara self.X en calls:)
+archivo: examples/11_bad_calls.py
+exit code esperado: 1
+==============================================================
+def helper(x: int) -> int:
+    """@generate
+    behavior:
+      return self._double(x)   # <-- no hay self acá
+
+    examples:
+      helper(2) == 4
+
+    calls:
+      self._double(x: int) -> int
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 12 — caso "no @generate" (función ignorada, sin diag)
+archivo: examples/12_no_generate.py
+exit code esperado: 0
+==============================================================
+def utility(x: int) -> int:
+    """Función normal, sin contrato @generate."""
+    return x + 1
+
+
+def with_contract(x: int) -> int:
+    """@generate
+    behavior:
+      return x + 1
+
+    examples:
+      with_contract(0) == 1
+      with_contract(-1) == 0
+
+    constraints:
+      no_imports
+    """
+    ...
+
+
+==============================================================
+EJEMPLO 13 — SyntaxError (archivo Python inválido)
+archivo: examples/13_syntax_error.py
+exit code esperado: 1
+==============================================================
+def broken(x: int) ->
+    return x
+
+
+==============================================================
+CÓMO USAR ESTOS EJEMPLOS
+==============================================================
+
+1) Crear los archivos en examples/ (o copiar y pegar cualquier
+   bloque en un .py nuevo).
+
+2) Procesar uno:
+
+       uv run cdcs-mini examples/01_parse_port.py
+
+3) Procesar todos y ver el código de salida:
+
+       for f in examples/*.py; do
+         echo "=== $f ==="
+         uv run cdcs-mini "$f" > /dev/null
+         echo "exit=$?"
+       done
+
+4) Usar el backend HTTP:
+
+       uv run uvicorn web.backend.app.main:app --reload &
+       curl -s -X POST http://127.0.0.1:8000/reports/from-file \
+            -F "file=@examples/01_parse_port.py" | jq .
+
+5) Modo synthesizer (requiere extra `synthesis` y un LLM):
+
+       uv sync --extra synthesis
+       export ANTHROPIC_API_KEY=sk-...    # o usar Ollama / Pollinations
+       uv run cdcs-mini compile examples/10_token_service.py --dest examples/_gen/
+       uv run cdcs-mini check   examples/10_token_service.py --dest examples/_gen/

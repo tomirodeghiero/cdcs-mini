@@ -14,15 +14,33 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from cdcs_mini.domain.diagnostics import Diagnostic
-from cdcs_mini.domain.models import BehaviorStep, Contract, FunctionReport, Report
+from cdcs_mini.domain.models import (
+    AttributeReadSpec,
+    BehaviorStep,
+    CallableSpec,
+    Contract,
+    FunctionReport,
+    Report,
+)
 from cdcs_mini.reporting.schema import (
+    AttributeReadSpecDict,
     BehaviorStepDict,
+    CallableSpecDict,
     DiagnosticDict,
     FunctionDict,
     ReportDict,
 )
+
+
+class _ContractFields(NamedTuple):
+    behavior: list[BehaviorStepDict]
+    examples_count: int
+    constraints: list[str]
+    calls: list[CallableSpecDict]
+    reads: list[AttributeReadSpecDict]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,33 +64,52 @@ class JsonReporter:
         }
 
     def _function_to_dict(self, fn: FunctionReport) -> FunctionDict:
-        parameters: dict[str, str | None] = {
-            p.name: p.annotation for p in fn.signature.parameters
-        }
-        behavior, examples_count, constraints = self._contract_fields(fn.contract)
+        parameters: dict[str, str | None] = {p.name: p.annotation for p in fn.signature.parameters}
+        fields = self._contract_fields(fn.contract)
         result: FunctionDict = {
             "name": fn.name,
             "status": fn.status,
             "parameters": parameters,
             "returns": fn.signature.returns,
-            "behavior": behavior,
-            "examples": examples_count,
-            "constraints": constraints,
+            "behavior": fields.behavior,
+            "examples": fields.examples_count,
+            "constraints": fields.constraints,
+            "calls": fields.calls,
+            "reads": fields.reads,
         }
         if fn.diagnostics:
             result["diagnostics"] = [self._diagnostic_to_dict(d) for d in fn.diagnostics]
         return result
 
-    def _contract_fields(
-        self, contract: Contract | None
-    ) -> tuple[list[BehaviorStepDict], int, list[str]]:
+    def _contract_fields(self, contract: Contract | None) -> _ContractFields:
         if contract is None:
-            return [], 0, []
-        return (
-            [self._behavior_step_to_dict(step) for step in contract.behavior],
-            len(contract.examples),
-            list(contract.constraints),
+            return _ContractFields(
+                behavior=[], examples_count=0, constraints=[], calls=[], reads=[]
+            )
+        return _ContractFields(
+            behavior=[self._behavior_step_to_dict(step) for step in contract.behavior],
+            examples_count=len(contract.examples),
+            constraints=list(contract.constraints),
+            calls=[self._callable_spec_to_dict(c) for c in contract.calls],
+            reads=[self._attribute_read_to_dict(r) for r in contract.reads],
         )
+
+    def _callable_spec_to_dict(self, spec: CallableSpec) -> CallableSpecDict:
+        return {
+            "qualified_name": spec.qualified_name,
+            "parameters": {p.name: p.annotation for p in spec.parameters},
+            "returns": spec.returns,
+            "purpose": spec.purpose,
+            "line": spec.line,
+        }
+
+    def _attribute_read_to_dict(self, spec: AttributeReadSpec) -> AttributeReadSpecDict:
+        return {
+            "qualified_name": spec.qualified_name,
+            "annotation": spec.annotation,
+            "purpose": spec.purpose,
+            "line": spec.line,
+        }
 
     def _behavior_step_to_dict(self, step: BehaviorStep) -> BehaviorStepDict:
         return {

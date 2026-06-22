@@ -18,7 +18,7 @@ def test_parses_behavior_steps_with_kinds() -> None:
         "  return int(value)\n"
         "\n"
         "examples:\n"
-        "  parse_port(\"80\") == 80\n"
+        '  parse_port("80") == 80\n'
     )
     result = _parse(body)
 
@@ -33,14 +33,7 @@ def test_parses_behavior_steps_with_kinds() -> None:
 
 
 def test_collects_parameter_references_excluding_call_targets() -> None:
-    body = (
-        "behavior:\n"
-        "  strip(value)\n"
-        "  return int(value)\n"
-        "\n"
-        "examples:\n"
-        "  f(\"x\") == \"x\"\n"
-    )
+    body = 'behavior:\n  strip(value)\n  return int(value)\n\nexamples:\n  f("x") == "x"\n'
     result = _parse(body)
 
     refs = [sorted(step.references) for step in result.contract.behavior]
@@ -48,13 +41,7 @@ def test_collects_parameter_references_excluding_call_targets() -> None:
 
 
 def test_examples_classified_as_equals_or_raises() -> None:
-    body = (
-        "behavior:\n"
-        "  return value\n"
-        "examples:\n"
-        '  f("1") == 1\n'
-        '  f("x") raises ValueError\n'
-    )
+    body = 'behavior:\n  return value\nexamples:\n  f("1") == 1\n  f("x") raises ValueError\n'
     result = _parse(body)
 
     assert [e.kind for e in result.contract.examples] == [
@@ -122,3 +109,109 @@ def test_base_line_offsets_diagnostics() -> None:
     # Every diagnostic should be anchored at line 10 or beyond (base_line offset)
     lines = [d.line for d in result.diagnostics if d.line is not None]
     assert lines and all(line >= 10 for line in lines)
+
+
+# --- calls section ---------------------------------------------------
+
+
+def test_parses_callable_with_self_qualifier_and_return_type() -> None:
+    body = (
+        "behavior:\n"
+        "  return value\n"
+        "examples:\n"
+        '  f("x") == "x"\n'
+        "calls:\n"
+        "  self._sign(payload: str) -> str  # HMAC of payload\n"
+    )
+    result = _parse(body)
+
+    assert result.diagnostics == ()
+    assert len(result.contract.calls) == 1
+    spec = result.contract.calls[0]
+    assert spec.qualified_name == "self._sign"
+    assert spec.returns == "str"
+    assert spec.purpose == "HMAC of payload"
+    assert [(p.name, p.annotation) for p in spec.parameters] == [("payload", "str")]
+
+
+def test_callable_without_return_arrow_has_none_return() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\ncalls:\n  log(msg: str)\n"
+    result = _parse(body)
+    assert result.diagnostics == ()
+    spec = result.contract.calls[0]
+    assert spec.returns is None
+    assert spec.purpose == ""
+
+
+def test_callable_with_complex_generic_return_preserves_annotation() -> None:
+    body = (
+        "behavior:\n  return value\n"
+        "examples:\n  f(1) == 1\n"
+        "calls:\n  fetch(key: str) -> dict[str, list[int]]  # cache lookup\n"
+    )
+    result = _parse(body)
+    assert result.diagnostics == ()
+    assert result.contract.calls[0].returns == "dict[str, list[int]]"
+
+
+def test_callable_with_unbalanced_paren_is_malformed() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\ncalls:\n  self._sign(payload: str\n"
+    result = _parse(body)
+    codes = {d.code for d in result.diagnostics}
+    assert DiagnosticCode.MALFORMED_DSL in codes
+    assert result.contract.calls == ()
+
+
+def test_callable_with_invalid_name_is_malformed() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\ncalls:\n  1_bad(p: int) -> int\n"
+    result = _parse(body)
+    codes = {d.code for d in result.diagnostics}
+    assert DiagnosticCode.MALFORMED_DSL in codes
+
+
+def test_callable_with_variadic_is_rejected() -> None:
+    body = (
+        "behavior:\n  return value\nexamples:\n  f(1) == 1\ncalls:\n  spread(*args: int) -> int\n"
+    )
+    result = _parse(body)
+    codes = {d.code for d in result.diagnostics}
+    assert DiagnosticCode.MALFORMED_DSL in codes
+
+
+# --- reads section ---------------------------------------------------
+
+
+def test_parses_attribute_read_with_annotation_and_purpose() -> None:
+    body = (
+        "behavior:\n  return value\n"
+        "examples:\n  f(1) == 1\n"
+        "reads:\n  self.secret_key: bytes  # used by _sign\n"
+    )
+    result = _parse(body)
+    assert result.diagnostics == ()
+    [attr] = result.contract.reads
+    assert attr.qualified_name == "self.secret_key"
+    assert attr.annotation == "bytes"
+    assert attr.purpose == "used by _sign"
+
+
+def test_attribute_without_annotation_is_accepted() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\nreads:\n  self.config\n"
+    result = _parse(body)
+    assert result.diagnostics == ()
+    [attr] = result.contract.reads
+    assert attr.annotation is None
+
+
+def test_attribute_with_invalid_name_is_malformed() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\nreads:\n  self.\n"
+    result = _parse(body)
+    codes = {d.code for d in result.diagnostics}
+    assert DiagnosticCode.MALFORMED_DSL in codes
+
+
+def test_calls_and_reads_default_to_empty_when_absent() -> None:
+    body = "behavior:\n  return value\nexamples:\n  f(1) == 1\n"
+    result = _parse(body)
+    assert result.contract.calls == ()
+    assert result.contract.reads == ()

@@ -27,6 +27,21 @@ class BehaviorStepDict(TypedDict):
     references: list[str]
 
 
+class CallableSpecDict(TypedDict):
+    qualified_name: str
+    parameters: dict[str, str | None]
+    returns: str | None
+    purpose: str
+    line: int
+
+
+class AttributeReadSpecDict(TypedDict):
+    qualified_name: str
+    annotation: str | None
+    purpose: str
+    line: int
+
+
 class FunctionDict(TypedDict):
     name: str
     status: Status
@@ -35,6 +50,8 @@ class FunctionDict(TypedDict):
     behavior: list[BehaviorStepDict]
     examples: int
     constraints: list[str]
+    calls: list[CallableSpecDict]
+    reads: list[AttributeReadSpecDict]
     diagnostics: NotRequired[list[DiagnosticDict]]
 
 

@@ -12,23 +12,26 @@ from dataclasses import dataclass
 
 from cdcs_mini.domain.diagnostics import Diagnostic, DiagnosticCode
 from cdcs_mini.domain.models import Contract, FunctionReport, Report
+from cdcs_mini.language.base import LanguageAdapter, SourceParserProtocol
+from cdcs_mini.language.python.adapter import PythonAdapter
 from cdcs_mini.parsing.dsl_parser import DSLParser
-from cdcs_mini.parsing.source_parser import ParsedFunction, SourceParser
-from cdcs_mini.validation.validators import DEFAULT_VALIDATORS, ContractValidator
+from cdcs_mini.parsing.source_parser import ParsedFunction
+from cdcs_mini.validation.validators import ContractValidator, default_validators
 
 
 @dataclass(frozen=True, slots=True)
 class ReportService:
-    source_parser: SourceParser
+    source_parser: SourceParserProtocol
     dsl_parser: DSLParser
     validators: Sequence[ContractValidator]
 
     @classmethod
-    def default(cls) -> ReportService:
+    def default(cls, adapter: LanguageAdapter | None = None) -> ReportService:
+        active = adapter or PythonAdapter()
         return cls(
-            source_parser=SourceParser(),
-            dsl_parser=DSLParser(),
-            validators=DEFAULT_VALIDATORS,
+            source_parser=active.source_parser,
+            dsl_parser=DSLParser(expression_parser=active.expression_parser),
+            validators=default_validators(active.known_globals),
         )
 
     def build_report(self, source: str, *, filename: str = "<input>") -> Report:
@@ -76,9 +79,7 @@ class ReportService:
             diagnostics=tuple(sorted(diagnostics)),
         )
 
-    def _run_validators(
-        self, parsed: ParsedFunction, contract: Contract
-    ) -> list[Diagnostic]:
+    def _run_validators(self, parsed: ParsedFunction, contract: Contract) -> list[Diagnostic]:
         result: list[Diagnostic] = []
         for validator in self.validators:
             result.extend(

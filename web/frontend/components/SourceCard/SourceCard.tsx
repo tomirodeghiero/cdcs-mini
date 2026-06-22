@@ -12,43 +12,49 @@ import {
 } from "@/components/icons";
 
 import { CodeEditor } from "./CodeEditor";
+import { PYTHON_SAMPLE, TS_SAMPLE } from "./samples";
 
 type Mode = "upload" | "paste";
+export type ActionMode = "analyze" | "synthesize";
+export type SourceLanguage = "python" | "typescript";
 
 type Props = {
   source: string;
   filename: string;
+  language: SourceLanguage;
   loading: boolean;
+  actionMode: ActionMode;
   onSourceChange: (value: string) => void;
   onFilenameChange: (value: string) => void;
   onFileLoaded: (file: File, contents: string) => void;
+  onLanguageChange: (next: SourceLanguage) => void;
+  onActionModeChange: (mode: ActionMode) => void;
   onSubmit: () => void;
 };
 
-const SAMPLE = `def parse_port(value: str) -> int:
-    """@generate
-    behavior:
-      strip(value)
-      require value matches digits
-      require 1 <= int(value) <= 65535
-      return int(value)
-    examples:
-      parse_port("80") == 80
-      parse_port("443") == 443
-      parse_port("0") raises ValueError
-    constraints:
-      no_imports
-      no_network
-      no_filesystem
-    """
-`;
+// Swap the file extension (if any) when the user flips languages. Keeps
+// the stem (``parse_port``) intact so people who renamed the file don't
+// lose context.
+export function swapFilenameExtension(filename: string, next: SourceLanguage): string {
+  const stem = filename.replace(/\.(py|ts|tsx)$/i, "");
+  const base = stem.length > 0 ? stem : "input";
+  return next === "typescript" ? `${base}.ts` : `${base}.py`;
+}
 
 export function SourceCard(props: Props) {
-  const { source, filename, loading } = props;
+  const { source, filename, language, loading, actionMode } = props;
   const [mode, setMode] = useState<Mode>("paste");
   const cmdKey = useCmdKey();
 
   const canSubmit = source.trim().length > 0;
+  const isSynthesize = actionMode === "synthesize";
+  const buttonLabel = loading
+    ? isSynthesize
+      ? "Synthesizing"
+      : "Generating"
+    : isSynthesize
+      ? "Synthesize impl + tests"
+      : "Generate report";
 
   return (
     <section className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-h-0 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
@@ -66,7 +72,11 @@ export function SourceCard(props: Props) {
               onChange={props.onSourceChange}
               filename={filename}
               onFilenameChange={props.onFilenameChange}
-              onLoadExample={() => props.onSourceChange(SAMPLE)}
+              language={language}
+              onLanguageChange={props.onLanguageChange}
+              onLoadExample={() =>
+                props.onSourceChange(language === "typescript" ? TS_SAMPLE : PYTHON_SAMPLE)
+              }
               onSubmit={props.onSubmit}
             />
           </div>
@@ -74,20 +84,27 @@ export function SourceCard(props: Props) {
         </div>
 
         <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-slate-200/60 pt-4 sm:flex-row sm:items-center dark:border-white/5">
-          <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 self-center text-xs text-slate-500 sm:self-auto dark:text-slate-400">
-            <span className="inline-flex items-center gap-2">
-              <InfoIcon className="h-3.5 w-3.5 shrink-0" />
-              Deterministic analysis
-            </span>
-            {cmdKey && (
-              <span className="inline-flex items-center gap-1">
-                <span className="text-slate-400 dark:text-slate-500">·</span>
-                <Kbd>{cmdKey}</Kbd>
-                <Kbd>↵</Kbd>
-                <span>to run</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <ActionToggle
+              value={actionMode}
+              onChange={props.onActionModeChange}
+              disabled={loading}
+            />
+            <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 self-center text-xs text-slate-500 sm:self-auto dark:text-slate-400">
+              <span className="inline-flex items-center gap-2">
+                <InfoIcon className="h-3.5 w-3.5 shrink-0" />
+                {isSynthesize ? "LLM-backed synthesis" : "Deterministic analysis"}
               </span>
-            )}
-          </p>
+              {cmdKey && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-slate-400 dark:text-slate-500">·</span>
+                  <Kbd>{cmdKey}</Kbd>
+                  <Kbd>↵</Kbd>
+                  <span>to run</span>
+                </span>
+              )}
+            </p>
+          </div>
           <button
             type="button"
             disabled={!canSubmit || loading}
@@ -95,7 +112,7 @@ export function SourceCard(props: Props) {
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-white/80 dark:disabled:from-slate-700 dark:disabled:to-slate-700 dark:disabled:text-slate-400"
           >
             {loading ? <Spinner /> : <SparkIcon className="h-4 w-4" />}
-            <span>{loading ? "Generating" : "Generate"}</span>
+            <span>{buttonLabel}</span>
           </button>
         </div>
       </div>
@@ -192,8 +209,8 @@ function DropZone({ onFileLoaded }: { onFileLoaded: Props["onFileLoaded"] }) {
       <div className="min-w-0 text-sm leading-relaxed">
         <div className="text-slate-700 dark:text-slate-200">
           <span className="font-medium text-slate-900 dark:text-slate-50">
-            <span className="sm:hidden">Tap to upload a .py file</span>
-            <span className="hidden sm:inline">Drag and drop a .py file here</span>
+            <span className="sm:hidden">Tap to upload a .py / .ts file</span>
+            <span className="hidden sm:inline">Drag and drop a .py or .ts file here</span>
           </span>
           <span className="hidden sm:inline">
             , or{" "}
@@ -203,13 +220,13 @@ function DropZone({ onFileLoaded }: { onFileLoaded: Props["onFileLoaded"] }) {
           </span>
         </div>
         <div className="text-xs text-slate-500 dark:text-slate-400">
-          Only .py files are supported.
+          Python (.py) and TypeScript (.ts / .tsx) sources are supported.
         </div>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept=".py,text/x-python"
+        accept=".py,.ts,.tsx,text/x-python,application/typescript"
         className="hidden"
         onChange={handlePick}
       />
@@ -222,6 +239,8 @@ function CodeArea({
   onChange,
   filename,
   onFilenameChange,
+  language,
+  onLanguageChange,
   onLoadExample,
   onSubmit,
 }: {
@@ -229,14 +248,19 @@ function CodeArea({
   onChange: (next: string) => void;
   filename: string;
   onFilenameChange: (next: string) => void;
+  language: SourceLanguage;
+  onLanguageChange: (next: SourceLanguage) => void;
   onLoadExample: () => void;
   onSubmit: () => void;
 }) {
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950/60 dark:shadow-none">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/60">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/60">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+          <span
+            className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+            aria-hidden
+          />
           <input
             value={filename}
             onChange={(e) => onFilenameChange(e.target.value)}
@@ -244,18 +268,91 @@ function CodeArea({
             className="w-full min-w-0 max-w-[14rem] bg-transparent font-mono text-xs text-slate-700 focus:outline-none dark:text-slate-200"
           />
         </div>
-        <button
-          type="button"
-          onClick={onLoadExample}
-          className="text-xs text-slate-500 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-400 dark:hover:text-indigo-300"
-        >
-          load example
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <LanguageToggle value={language} onChange={onLanguageChange} />
+          <button
+            type="button"
+            onClick={onLoadExample}
+            className="text-xs text-slate-500 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-slate-400 dark:hover:text-indigo-300"
+          >
+            load example
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1">
-        <CodeEditor value={value} onChange={onChange} height="100%" onSubmit={onSubmit} />
+        <CodeEditor
+          value={value}
+          onChange={onChange}
+          height="100%"
+          onSubmit={onSubmit}
+          language={language}
+        />
       </div>
     </div>
+  );
+}
+
+function LanguageToggle({
+  value,
+  onChange,
+}: {
+  value: SourceLanguage;
+  onChange: (next: SourceLanguage) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Source language"
+      title="Toggle the source language (filename + editor follow)"
+      className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-[10px] font-semibold uppercase tracking-wide dark:border-white/10 dark:bg-slate-900/60"
+    >
+      <LanguageTab
+        active={value === "python"}
+        accent="amber"
+        onClick={() => onChange("python")}
+      >
+        PY
+      </LanguageTab>
+      <LanguageTab
+        active={value === "typescript"}
+        accent="blue"
+        onClick={() => onChange("typescript")}
+      >
+        TS
+      </LanguageTab>
+    </div>
+  );
+}
+
+function LanguageTab({
+  active,
+  accent,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  accent: "amber" | "blue";
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const activeClass =
+    accent === "amber"
+      ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+      : "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300";
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`rounded-[5px] px-1.5 py-0.5 transition ${
+        active
+          ? activeClass
+          : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -273,6 +370,68 @@ function UploadInstructions() {
         <li>• Switch to “Paste source code” to edit inline</li>
       </ul>
     </div>
+  );
+}
+
+function ActionToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: ActionMode;
+  onChange: (next: ActionMode) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Choose action"
+      className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-medium dark:border-white/10 dark:bg-white/5"
+    >
+      <ActionTab
+        active={value === "analyze"}
+        onClick={() => onChange("analyze")}
+        disabled={disabled}
+      >
+        Analyze
+      </ActionTab>
+      <ActionTab
+        active={value === "synthesize"}
+        onClick={() => onChange("synthesize")}
+        disabled={disabled}
+      >
+        Synthesize
+      </ActionTab>
+    </div>
+  );
+}
+
+function ActionTab({
+  active,
+  onClick,
+  disabled,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-md px-3 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+        active
+          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-50"
+          : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

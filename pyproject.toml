@@ -17,14 +17,23 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-mock>=3.14",
     "mypy>=1.10",
     "ruff>=0.5",
     "httpx>=0.27",
+    "yamllint>=1.35",
+    "radon>=6.0",
+]
+# Only needed for `cdcs-mini compile`; the analyzer/reporter and `check`
+# subcommand work without it. Install with: pip install -e .[synthesis]
+synthesis = [
+    "anthropic>=0.40",
 ]
 
 [project.scripts]
@@ -33,10 +42,38 @@ cdcs-mini = "cdcs_mini.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cdcs_mini"]
 
+# ---------------------------------------------------------------------------
+# uv — managed environment + lockfile (PEP 735 dependency groups).
+# `uv sync` installs the default group automatically; `pip install -e .[dev]`
+# still works via [project.optional-dependencies].dev.
+# Add `--extra synthesis` to pull anthropic for the synthesizer.
+# ---------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+    "mypy>=1.10",
+    "ruff>=0.5",
+    "httpx>=0.27",
+    "yamllint>=1.35",
+    "radon>=6.0",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --strict-markers"
 pythonpath = ["src", "."]
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # FastAPI/Starlette occasionally surface DeprecationWarnings from
+    # third-party imports we do not own; demote those so the suite is not
+    # held hostage by upstream churn (e.g. starlette 1.3 prefers httpx2).
+    "default::DeprecationWarning:fastapi.*",
+    "default::DeprecationWarning:starlette.*",
+    "default::DeprecationWarning:httpx.*",
+    "default::starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -60,23 +97,73 @@ ignore_missing_imports = true
 target-version = "py312"
 line-length = 100
 src = ["src", "web", "tests"]
-extend-exclude = ["tests/fixtures/syntax_error.py"]
+# Fixtures are deliberately malformed/minimal Python; lint rules don't apply.
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-    "SIM", # flake8-simplify
-    "RUF", # ruff-specific
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "C90",  # mccabe complexity
+    "TID",  # flake8-tidy-imports (absolute-only by default below)
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "PL",   # pylint (subset Ruff implements)
 ]
-ignore = ["E501"]  # line length handled by formatter
+ignore = [
+    "E501",    # line length handled by formatter
+    "PLR0913", # too-many-arguments — orchestrators legitimately accept many
+    "PLR2004", # magic numbers — false positives in tests and threshold consts
+    # Local imports are an intentional pattern here: they break import cycles
+    # in domain↔synthesis seams and make `anthropic` truly optional. Forcing
+    # them to the top would re-introduce the cycles.
+    "PLC0415",
+    # `lambda: _default_gates()` is deliberate — the wrapped function is
+    # defined *after* the dataclass, so a direct reference would be unbound.
+    "PLW0108",
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B018"]
+"tests/**" = [
+    "B018",     # useless expression — common in pytest assertions on properties
+    "PLR2004",  # magic numbers in tests are fine
+    "PT011",    # broad `pytest.raises(ValueError)` is acceptable in our tests
+    "PT018",    # compound asserts are readable when the predicate is small
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["cdcs_mini"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = false
+
+# ---------------------------------------------------------------------------
+# Radon — complexity / maintainability index thresholds.
+# Radon does not read [tool.radon] natively (it reads radon.cfg / setup.cfg);
+# the keys below are documentation for the Makefile / CI invocations.
+#   cc grade A = simple, B = well-structured, C = slightly complex.
+#   mi grade A = highly maintainable.
+# We *report* below A on CC but do not fail the build initially.
+# ---------------------------------------------------------------------------
+[tool.radon]
+cc-min = "A"
+mi-min = "A"
+exclude = "tests/fixtures/*,**/__pycache__/*"
 
 [tool.vercel]
 entrypoint = "api/index.py"

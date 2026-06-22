@@ -1,0 +1,34 @@
+{
+  "name": "cdcs-mini-ts-runtime",
+  "version": "0.1.0",
+  "description": "Node-side helpers that let the Python cdcs-mini pipeline parse TypeScript via the TS Compiler API. Spawned by subprocess; communicates with the parent over JSON on stdin/stdout.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src tests --max-warnings 0",
+    "format": "prettier --write src tests",
+    "format:check": "prettier --check src tests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "quality": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "parse-expressions": "node dist/bin/parse-expressions.js",
+    "parse-source": "node dist/bin/parse-source.js"
+  },
+  "dependencies": {
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -65,3 +65,58 @@ async function extractErrorDetail(response: Response): Promise<string> {
   }
   return `Request failed with status ${response.status}`;
 }
+
+// --- synthesis endpoint ---------------------------------------------
+
+export type SynthesisFailure = {
+  code: string;
+  message: string;
+  detail: string[];
+  partial_implementation?: string | null;
+};
+
+export type DiagnosticInfo = {
+  code: string;
+  message: string;
+  line: number | null;
+};
+
+export type SynthesizedFunction = {
+  name: string;
+  line: number;
+  status: "ok" | "error" | "skipped";
+  implementation: string | null;
+  test: string | null;
+  contract_hash: string | null;
+  model: string | null;
+  llm_calls: number | null;
+  repair_attempts: number | null;
+  failure: SynthesisFailure | null;
+  upstream_diagnostics: DiagnosticInfo[];
+};
+
+export type SynthesisLanguage = "python" | "typescript";
+
+export type SynthesizePayload = {
+  source_filename: string;
+  language: SynthesisLanguage;
+  impl_filename: string;
+  test_filename: string;
+  functions: SynthesizedFunction[];
+  errors: DiagnosticInfo[];
+};
+
+export async function synthesizeFromSource(
+  source: string,
+  filename = "input.py",
+): Promise<SynthesizePayload> {
+  const response = await fetch(`${API_URL}/synthesize/from-source`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, source }),
+  });
+  if (!response.ok) {
+    throw new ApiError(await extractErrorDetail(response), response.status);
+  }
+  return (await response.json()) as SynthesizePayload;
+}

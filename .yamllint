@@ -1,0 +1,34 @@
+# yamllint configuration for cdcs-mini.
+# Goal: enforce baseline hygiene on YAML (CI workflows, vercel configs, etc.)
+# without being noisy about cosmetics. Tighten rules as the YAML surface grows.
+
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  document-start: disable
+  truthy:
+    # GitHub Actions `on:` keyword trips the default truthy rule.
+    allowed-values: ["true", "false", "on", "off"]
+    check-keys: true
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+
+ignore: |
+  .venv/
+  node_modules/
+  .next/
+  .vercel/
+  web/frontend/
+  ts-runtime/node_modules/
+  ts-runtime/dist/
+  **/__pycache__/

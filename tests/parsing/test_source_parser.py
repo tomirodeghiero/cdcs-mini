@@ -14,9 +14,7 @@ def test_extracts_signature_and_generate_body(read_fixture: Callable[[str], str]
 
     fn = parsed.functions[0]
     assert fn.name == "parse_port"
-    assert tuple((p.name, p.annotation) for p in fn.signature.parameters) == (
-        ("value", "str"),
-    )
+    assert tuple((p.name, p.annotation) for p in fn.signature.parameters) == (("value", "str"),)
     assert fn.signature.returns == "int"
     assert fn.signature.has_variadic is False
     assert fn.docstring is not None

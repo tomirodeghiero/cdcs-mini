@@ -5,32 +5,80 @@ import { useState } from "react";
 
 import { Navbar } from "@/components/Navbar";
 import { ResultsCard } from "@/components/ResultsCard";
-import { SourceCard } from "@/components/SourceCard";
-import { ApiError, generateFromSource, type ReportPayload } from "@/lib/api";
+import {
+  PYTHON_SAMPLE,
+  SourceCard,
+  TS_SAMPLE,
+  swapFilenameExtension,
+  type ActionMode,
+  type SourceLanguage,
+} from "@/components/SourceCard";
+import { SynthesisCard } from "@/components/SynthesisCard";
+import {
+  ApiError,
+  generateFromSource,
+  synthesizeFromSource,
+  type ReportPayload,
+  type SynthesizePayload,
+} from "@/lib/api";
 
 const DEFAULT_FILENAME = "input.py";
+
+function detectLanguage(filename: string): SourceLanguage {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+  return "python";
+}
 
 export default function HomePage() {
   const [source, setSource] = useState("");
   const [filename, setFilename] = useState(DEFAULT_FILENAME);
+  const [language, setLanguage] = useState<SourceLanguage>("python");
+  const [actionMode, setActionMode] = useState<ActionMode>("analyze");
   const [report, setReport] = useState<ReportPayload | null>(null);
+  const [synthesis, setSynthesis] = useState<SynthesizePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function handleFileLoaded(file: File, contents: string) {
     setSource(contents);
     setFilename(file.name);
+    setLanguage(detectLanguage(file.name));
+  }
+
+  function handleLanguageChange(next: SourceLanguage) {
+    if (next === language) return;
+    setLanguage(next);
+    setFilename((current) => swapFilenameExtension(current, next));
+    // If the editor still holds the *other* language's stock sample, swap
+    // it for this language's sample so the example stays useful after the
+    // toggle. Anything the user actually typed stays put.
+    setSource((current) => {
+      const trimmed = current.trim();
+      if (trimmed.length === 0) return current;
+      if (current === PYTHON_SAMPLE || current === TS_SAMPLE) {
+        return next === "typescript" ? TS_SAMPLE : PYTHON_SAMPLE;
+      }
+      return current;
+    });
   }
 
   async function handleSubmit() {
     setLoading(true);
     setError(null);
+    const name = filename || DEFAULT_FILENAME;
     try {
-      const next = await generateFromSource(source, filename || DEFAULT_FILENAME);
-      setReport(next);
+      if (actionMode === "analyze") {
+        const next = await generateFromSource(source, name);
+        setReport(next);
+      } else {
+        const next = await synthesizeFromSource(source, name);
+        setSynthesis(next);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : (e as Error).message);
-      setReport(null);
+      if (actionMode === "analyze") setReport(null);
+      else setSynthesis(null);
     } finally {
       setLoading(false);
     }
@@ -53,13 +101,24 @@ export default function HomePage() {
             <SourceCard
               source={source}
               filename={filename}
+              language={language}
               loading={loading}
+              actionMode={actionMode}
               onSourceChange={setSource}
-              onFilenameChange={setFilename}
+              onFilenameChange={(value) => {
+                setFilename(value);
+                setLanguage(detectLanguage(value));
+              }}
               onFileLoaded={handleFileLoaded}
+              onLanguageChange={handleLanguageChange}
+              onActionModeChange={setActionMode}
               onSubmit={handleSubmit}
             />
-            <ResultsCard report={report} />
+            {actionMode === "analyze" ? (
+              <ResultsCard report={report} />
+            ) : (
+              <SynthesisCard result={synthesis} />
+            )}
           </div>
         </div>
       </main>

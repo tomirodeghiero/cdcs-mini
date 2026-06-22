@@ -1,17 +1,20 @@
 """``cdcs-mini`` CLI entry point.
 
-Usage::
+Three top-level modes:
 
-    cdcs-mini input.py --out report.json
-    cdcs-mini input.py            # JSON to stdout
+* ``cdcs-mini input.py [--out report.json]`` (default) — analyzer/reporter,
+  same behavior as the original POC: parses, validates, emits JSON.
+* ``cdcs-mini compile input.py [--dest dir/]`` — full synthesis: invokes
+  the LLM, emits ``input.generated.py``/``test_input.generated.py``,
+  updates ``cdcs.lock``.
+* ``cdcs-mini check input.py [--dest dir/]`` — CI mode: no LLM call;
+  validates that lock + generated files are in sync with the current
+  contracts.
 
-Exit codes:
-    0 — report generated, no diagnostics
-    1 — diagnostics emitted (the report still gets written)
-    2 — usage error (missing file, bad arguments)
-
-The decorated output goes through stderr. stdout and ``--out`` keep
-the JSON contract byte-for-byte so pipes don't break.
+Exit codes (preserved across modes):
+    0 — clean
+    1 — diagnostics / drift detected
+    2 — usage error
 """
 
 from __future__ import annotations
@@ -31,11 +34,37 @@ from rich.table import Table
 from rich.text import Text
 
 from cdcs_mini.application.report_service import ReportService
+from cdcs_mini.application.synthesis_service import (
+    CompilationReport,
+    CompiledFunction,
+    SynthesisService,
+)
 from cdcs_mini.domain.diagnostics import Diagnostic
 from cdcs_mini.domain.models import Report
+from cdcs_mini.language.base import LanguageAdapter
+from cdcs_mini.language.python.adapter import PythonAdapter
+from cdcs_mini.language.typescript.adapter import TypeScriptAdapter
+from cdcs_mini.language.typescript.code_parser import (
+    try_parse_typescript,
+    typescript_test_sanity_failures,
+)
 from cdcs_mini.reporting.json_reporter import JsonReporter
+from cdcs_mini.synthesis.artifacts import (
+    LOCK_FILENAME,
+    ArtifactEmitter,
+    StaleArtifact,
+    load_lock,
+    save_lock,
+)
+from cdcs_mini.synthesis.gates import GateChain
+from cdcs_mini.synthesis.llm import LLMClient, LLMError, default_llm_client
+from cdcs_mini.synthesis.orchestrator import SynthesisOrchestrator
+from cdcs_mini.synthesis.policy import SynthesisPolicy
+from cdcs_mini.synthesis.prompt import PromptBuilder
 
 __version__ = "0.1.0"
+
+SUBCOMMANDS: frozenset[str] = frozenset({"compile", "check"})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,8 +96,177 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] in SUBCOMMANDS:
+        subcommand, rest = raw[0], raw[1:]
+        if subcommand == "compile":
+            return _run_compile(rest)
+        if subcommand == "check":
+            return _run_check(rest)
+    # Backwards-compatible default: the analyzer/reporter
+    args = build_parser().parse_args(raw)
     return _run(args)
+
+
+# --- compile subcommand ---------------------------------------------
+
+
+def _build_compile_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="cdcs-mini compile",
+        description=(
+            "Synthesize and verify implementation and tests for every "
+            "@generate function in the source file."
+        ),
+    )
+    parser.add_argument("input", type=Path)
+    parser.add_argument(
+        "--dest",
+        type=Path,
+        default=None,
+        help="output directory (defaults to the input file's directory)",
+    )
+    parser.add_argument(
+        "--lock",
+        type=Path,
+        default=None,
+        help="path to cdcs.lock (defaults to <dest>/cdcs.lock)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="override the LLM model id (default: claude-opus-4-7)",
+    )
+    parser.add_argument("--quiet", action="store_true", help="suppress decorative output on stderr")
+    parser.add_argument("--no-color", action="store_true", help="disable colored output on stderr")
+    return parser
+
+
+def _run_compile(argv: Sequence[str]) -> int:
+    args = _build_compile_parser().parse_args(argv)
+    ui = _UI(quiet=args.quiet, no_color=args.no_color)
+    source = _read_source(args.input, ui)
+    if source is None:
+        return 2
+    dest_dir = args.dest or args.input.parent
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = args.lock or (dest_dir / LOCK_FILENAME)
+    lockfile = load_lock(lock_path)
+    llm = _build_llm_client(args.model)
+    adapter = _select_adapter(args.input)
+    policy = SynthesisPolicy.strict_default()
+    orchestrator_kwargs: dict[str, object] = {
+        "prompt_builder": PromptBuilder(policy=policy, language=adapter.prompt_profile),
+    }
+    if adapter.name == "typescript":
+        orchestrator_kwargs["code_parser"] = try_parse_typescript
+        orchestrator_kwargs["gate_chain"] = GateChain(gates=())
+        orchestrator_kwargs["test_sanity_checker"] = typescript_test_sanity_failures
+    service = SynthesisService(
+        report_service=ReportService.default(adapter),
+        orchestrator=SynthesisOrchestrator.with_llm(llm, **orchestrator_kwargs),  # type: ignore[arg-type]
+        emitter=ArtifactEmitter(
+            impl_suffix=adapter.impl_artifact_suffix,
+            test_suffix=adapter.test_artifact_suffix,
+        ),
+        policy=policy,
+    )
+    ui.compile_banner(args.input, dest_dir, llm.model)
+    started = time.perf_counter()
+    try:
+        report = service.compile(
+            source=source,
+            source_path=args.input,
+            dest_dir=dest_dir,
+            lockfile=lockfile,
+        )
+    except LLMError as exc:
+        ui.fatal(f"cdcs-mini: LLM error: {exc}")
+        return 2
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    if not report.has_errors:
+        save_lock(report.lockfile, lock_path)
+    ui.compile_report(report, lock_path, elapsed_ms)
+    return 1 if report.has_errors else 0
+
+
+def _select_adapter(path: Path) -> LanguageAdapter:
+    """Pick the language adapter for a given source file by extension.
+
+    Falls back to :class:`PythonAdapter` when the extension isn't
+    recognised, matching cdcs-mini's original Python-only behaviour for
+    paths like ``input`` (no suffix) used by the test fixtures.
+    """
+    suffix = path.suffix.lower()
+    if suffix in {".ts", ".tsx"}:
+        return TypeScriptAdapter()
+    return PythonAdapter()
+
+
+def _build_llm_client(model: str | None) -> LLMClient:
+    # Honor the documented backend-resolution order (CDCS_LLM_PROVIDER →
+    # ANTHROPIC_API_KEY → Ollama → Pollinations). Explicit --model only
+    # overrides the model id, not the backend choice.
+    if model is not None:
+        return default_llm_client(model=model)
+    return default_llm_client()
+
+
+# --- check subcommand ----------------------------------------------
+
+
+def _build_check_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="cdcs-mini check",
+        description="Verify that generated artifacts match the current @generate contracts (CI mode).",
+    )
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--dest", type=Path, default=None)
+    parser.add_argument("--lock", type=Path, default=None)
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--no-color", action="store_true")
+    return parser
+
+
+def _run_check(argv: Sequence[str]) -> int:
+    args = _build_check_parser().parse_args(argv)
+    ui = _UI(quiet=args.quiet, no_color=args.no_color)
+    source = _read_source(args.input, ui)
+    if source is None:
+        return 2
+    dest_dir = args.dest or args.input.parent
+    lock_path = args.lock or (dest_dir / LOCK_FILENAME)
+    lockfile = load_lock(lock_path)
+    adapter = _select_adapter(args.input)
+    # The check path doesn't need a real LLM client — the orchestrator
+    # isn't called in check mode. Pass any client to satisfy the type.
+    service = SynthesisService(
+        report_service=ReportService.default(adapter),
+        orchestrator=SynthesisOrchestrator.with_llm(_NoopLLM()),
+        emitter=ArtifactEmitter(
+            impl_suffix=adapter.impl_artifact_suffix,
+            test_suffix=adapter.test_artifact_suffix,
+        ),
+    )
+    stale = service.check(
+        source=source,
+        source_path=args.input,
+        dest_dir=dest_dir,
+        lockfile=lockfile,
+    )
+    ui.check_report(args.input, stale)
+    return 1 if stale else 0
+
+
+class _NoopLLM:
+    """Placeholder LLM used by ``check`` mode — never invoked."""
+
+    model = "noop"
+
+    def complete(self, prompt: object) -> str:  # pragma: no cover - never called
+        _ = prompt
+        raise RuntimeError("check mode must not call the LLM")
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -82,8 +280,9 @@ def _run(args: argparse.Namespace) -> int:
     ui.banner()
     ui.input_info(input_path, input_path.stat().st_size)
 
+    adapter = _select_adapter(input_path)
     started = time.perf_counter()
-    report = ReportService.default().build_report(source, filename=str(input_path))
+    report = ReportService.default(adapter).build_report(source, filename=str(input_path))
     elapsed_ms = (time.perf_counter() - started) * 1000
 
     payload = JsonReporter().render(report)
@@ -176,7 +375,7 @@ class _UI:
         table.add_column(style="bright_white")
         table.add_column()
 
-        table.add_row("Functions",   Text(str(n_fn), style="bold"))
+        table.add_row("Functions", Text(str(n_fn), style="bold"))
         table.add_row("Diagnostics", Text(f"{n_diag}  {diag_glyph}", style=diag_style))
         table.add_row("Constraints", Text(str(n_constraints), style="bold"))
 
@@ -271,6 +470,89 @@ class _UI:
         self._console.print(exit_text)
         self._console.print()
 
+    # --- compile / check chrome ------------------------------------
+
+    def compile_banner(self, input_path: Path, dest_dir: Path, model: str) -> None:
+        title = Text()
+        title.append("🛠  cdcs-mini compile ", style="bold cyan")
+        title.append(f"v{__version__}", style="dim")
+        self._console.print()
+        self._console.print(title)
+        for label, value in (
+            ("source", str(input_path)),
+            ("dest  ", str(dest_dir)),
+            ("model ", model),
+        ):
+            text = Text()
+            text.append("  ·  ", style="dim")
+            text.append(label, style="bold")
+            text.append(f"  {value}", style="cyan")
+            self._console.print(text)
+        self._console.print()
+
+    def compile_report(
+        self,
+        report: CompilationReport,
+        lock_path: Path,
+        elapsed_ms: float,
+    ) -> None:
+        for fn in report.functions:
+            self._print_compiled_function(fn)
+        ok = sum(1 for fn in report.functions if fn.status == "ok")
+        err = sum(1 for fn in report.functions if fn.status == "error")
+        skipped = sum(1 for fn in report.functions if fn.status == "skipped")
+        summary = Text()
+        summary.append("\n  ✓ ", style="bold green" if err == 0 else "bold yellow")
+        summary.append(f"{ok} synthesized", style="bold")
+        summary.append(f"  ·  {err} errors", style="bold red" if err else "dim")
+        summary.append(f"  ·  {skipped} skipped", style="dim")
+        summary.append(f"  ·  {elapsed_ms:.0f} ms", style="dim")
+        self._console.print(summary)
+        if not report.has_errors:
+            self._console.print(Text(f"\n  📝 lock: {lock_path}", style="dim"))
+        self._console.print()
+
+    def _print_compiled_function(self, fn: CompiledFunction) -> None:
+        marker = {"ok": "✓", "error": "✗", "skipped": "•"}[fn.status]
+        style = {"ok": "bold green", "error": "bold red", "skipped": "dim"}[fn.status]
+        line = Text()
+        line.append(f"  {marker} ", style=style)
+        line.append(fn.function_name, style="cyan")
+        if fn.status == "ok" and fn.outcome is not None:
+            line.append(
+                f"  ({fn.outcome.llm_calls} LLM calls, {fn.outcome.repair_attempts} repairs)",
+                style="dim",
+            )
+        if fn.status == "error" and fn.failure is not None:
+            line.append(f"  {fn.failure.code.value}", style="red")
+        self._console.print(line)
+        if fn.status == "error":
+            if fn.failure is not None:
+                self._console.print(Text(f"      {fn.failure.message}", style="red"))
+            for diagnostic in fn.upstream_diagnostics:
+                self._console.print(Text(f"      {diagnostic.format()}", style="red"))
+
+    def check_report(self, input_path: Path, stale: tuple[StaleArtifact, ...]) -> None:
+        title = Text()
+        title.append("🔎 cdcs-mini check ", style="bold cyan")
+        title.append(f"v{__version__}  ", style="dim")
+        title.append(str(input_path), style="dim")
+        self._console.print()
+        self._console.print(title)
+        if not stale:
+            self._console.print(Text("  ✓ artifacts in sync", style="bold green"))
+            self._console.print()
+            return
+        self._console.print(Text(f"  ✗ {len(stale)} drift(s) detected", style="bold red"))
+        for item in stale:
+            line = Text()
+            line.append("    · ", style="dim")
+            line.append(f"{item.source}::{item.function}", style="cyan")
+            line.append(f"  [{item.reason}]", style="bold red")
+            line.append(f"  {item.detail}", style="dim")
+            self._console.print(line)
+        self._console.print()
+
     # --- fatal ------------------------------------------------------
 
     def fatal(self, message: str) -> None:
@@ -290,9 +572,7 @@ def _total_diagnostics(report: Report) -> int:
 
 
 def _total_constraints(report: Report) -> int:
-    return sum(
-        len(fn.contract.constraints) for fn in report.functions if fn.contract is not None
-    )
+    return sum(len(fn.contract.constraints) for fn in report.functions if fn.contract is not None)
 
 
 def _diag_decorations(n_diag: int) -> tuple[str, str]:

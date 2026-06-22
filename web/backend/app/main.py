@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from web.backend.app.routers import health, reports
+from web.backend.app.routers import health, reports, synthesize
 from web.backend.app.settings import (
     API_DESCRIPTION,
     API_SUMMARY,
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(reports.router)
+    app.include_router(synthesize.router)
 
     return app
 

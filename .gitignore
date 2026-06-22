@@ -44,6 +44,10 @@ out/
 .eslintcache
 .parcel-cache/
 
+# ---------- ts-runtime build outputs ----------
+ts-runtime/dist/
+ts-runtime/dist-test/
+
 # ---------- Environment ----------
 .env
 .env.local

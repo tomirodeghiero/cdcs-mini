@@ -120,4 +120,6 @@ def test_no_external_keys_appear_in_baseline_output(
         "behavior",
         "examples",
         "constraints",
+        "calls",
+        "reads",
     }

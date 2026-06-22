@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Pin Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync locked environment
+        run: uv sync --locked
+
+      - name: Ruff — lint
+        run: uv run ruff check src tests web api
+
+      - name: Ruff — format check
+        run: uv run ruff format --check src tests web api
+
+      - name: mypy --strict
+        run: uv run mypy --strict src tests web api
+
+      - name: yamllint
+        run: uv run yamllint -s .github .yamllint
+
+      - name: pytest
+        run: uv run pytest
+
+      # Radon is informational on this branch — surface complexity hotspots
+      # without failing the pipeline until the team agrees on a hard limit.
+      - name: Radon — cyclomatic complexity (report only)
+        run: uv run radon cc -a -s src web api
+
+      - name: Radon — maintainability index (report only)
+        run: uv run radon mi -s src web api
+
+  ts-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ts-runtime
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ts-runtime/package-lock.json
+
+      - name: Install ts-runtime deps
+        run: npm ci
+
+      - name: ts-runtime quality (typecheck + lint + format:check + test)
+        run: npm run quality

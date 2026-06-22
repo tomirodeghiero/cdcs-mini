@@ -2,29 +2,83 @@
 
 Each one is pure: signature + contract + line in, diagnostics out.
 That keeps them trivial to test and free to compose.
+
+Validation phases (mapped to PDF §7):
+  * signature consistency  -> ``validate_known_parameters``
+  * completeness           -> ``validate_completeness``
+  * missing samples        -> ``validate_examples_present``
+  * examples consistency   -> ``validate_examples_consistency``
+  * callable-surface       -> ``validate_callable_surface``
+
+Each validator is independent and order does not matter for correctness.
+The orchestrator just concatenates the diagnostic streams.
 """
 
 from __future__ import annotations
 
+import ast
 import builtins
 from collections.abc import Iterable
 from typing import Final, Protocol
 
 from cdcs_mini.domain.diagnostics import Diagnostic, DiagnosticCode
-from cdcs_mini.domain.models import BehaviorStep, Contract, Signature
-
-# Names that can show up inside DSL expressions and aren't function parameters:
-# every Python builtin plus a small set of matcher keywords (digits, alpha, ...)
-_DSL_CONSTANTS: Final[frozenset[str]] = frozenset(
-    {"digits", "alpha", "alnum", "whitespace", "ascii", "True", "False", "None"}
+from cdcs_mini.domain.models import (
+    AttributeReadSpec,
+    BehaviorStep,
+    CallableSpec,
+    Contract,
+    Example,
+    ExampleKind,
+    Parameter,
+    Signature,
 )
-KNOWN_NON_PARAMETER_NAMES: Final[frozenset[str]] = frozenset(dir(builtins)) | _DSL_CONSTANTS
+
+# DSL-level matcher keywords. Always known, regardless of host language —
+# they belong to the contract grammar (``require X matches digits``).
+DSL_MATCHERS: Final[frozenset[str]] = frozenset({"digits", "alpha", "alnum", "whitespace", "ascii"})
+
+# Backwards-compatible Python-default. New code paths inject the host
+# language's globals via :func:`make_known_parameters_validator`.
+_PYTHON_DSL_LITERALS: Final[frozenset[str]] = frozenset({"True", "False", "None"})
+KNOWN_NON_PARAMETER_NAMES: Final[frozenset[str]] = (
+    frozenset(dir(builtins)) | _PYTHON_DSL_LITERALS | DSL_MATCHERS
+)
 
 
 class ContractValidator(Protocol):
     def __call__(
         self, *, signature: Signature, contract: Contract, function_line: int
     ) -> Iterable[Diagnostic]: ...
+
+
+def make_known_parameters_validator(
+    known_globals: frozenset[str],
+) -> ContractValidator:
+    """Bind ``validate_known_parameters`` to a host-language ``known_globals``.
+
+    The returned closure satisfies :class:`ContractValidator` and can be
+    dropped into a validator chain. Use this when assembling a chain via
+    a :class:`~cdcs_mini.language.base.LanguageAdapter`; the bare
+    :func:`validate_known_parameters` keeps the Python default for
+    legacy callers and tests.
+    """
+    known = known_globals | DSL_MATCHERS
+
+    def _validate(
+        *, signature: Signature, contract: Contract, function_line: int
+    ) -> Iterable[Diagnostic]:
+        _ = function_line
+        full_known = signature.parameter_names | known
+        diagnostics: list[Diagnostic] = []
+        seen: set[tuple[int, str]] = set()
+        for step in contract.behavior:
+            diagnostics.extend(_unknown_parameter_diagnostics(step, full_known, seen))
+        return diagnostics
+
+    return _validate
+
+
+# --- examples presence ------------------------------------------------
 
 
 def validate_examples_present(
@@ -40,6 +94,9 @@ def validate_examples_present(
             message="examples section not found",
         ),
     )
+
+
+# --- signature ↔ behavior consistency ---------------------------------
 
 
 def validate_known_parameters(
@@ -74,7 +131,273 @@ def _unknown_parameter_diagnostics(
     return found
 
 
+# --- examples consistency (no contradictions) -------------------------
+
+
+def validate_examples_consistency(
+    *, signature: Signature, contract: Contract, function_line: int
+) -> Iterable[Diagnostic]:
+    """Flag examples that share an LHS call but disagree on the result.
+
+    Two ``==`` examples with identical normalized calls but different
+    expected values, or mixing ``==`` and ``raises`` on the same call,
+    map to PDF §8 ``PromptCannotSatisfyTestsError``/``ContradictoryExamplesError``.
+    """
+    _ = signature, function_line
+    diagnostics: list[Diagnostic] = []
+    seen: dict[str, tuple[str, int]] = {}  # call_key -> (result_key, line)
+    for example in contract.examples:
+        key = _example_key(example)
+        if key is None:
+            continue
+        call_key, result_key = key
+        prior = seen.get(call_key)
+        if prior is None:
+            seen[call_key] = (result_key, example.line)
+            continue
+        if prior[0] == result_key:
+            continue  # exact duplicate, not contradictory
+        diagnostics.append(
+            Diagnostic(
+                line=example.line,
+                code=DiagnosticCode.CONTRADICTORY_EXAMPLES,
+                message=(f"example contradicts prior at line {prior[1]}: {example.raw!r}"),
+            )
+        )
+    return diagnostics
+
+
+def _example_key(example: Example) -> tuple[str, str] | None:
+    """Normalize an example into ``(call_key, result_key)`` strings.
+
+    Returns ``None`` when the example is unparseable — the malformed-DSL
+    pass will have flagged it already and we don't want to double up.
+    """
+    if example.kind is ExampleKind.EQUALS:
+        return _equals_example_key(example.raw)
+    return _raises_example_key(example.raw)
+
+
+def _equals_example_key(raw: str) -> tuple[str, str] | None:
+    try:
+        tree = ast.parse(raw, mode="eval")
+    except SyntaxError:
+        return None
+    body = tree.body
+    if not isinstance(body, ast.Compare):
+        return None
+    if len(body.ops) != 1 or not isinstance(body.ops[0], ast.Eq):
+        return None
+    if len(body.comparators) != 1:
+        return None
+    return ast.unparse(body.left), f"equals:{ast.unparse(body.comparators[0])}"
+
+
+def _raises_example_key(raw: str) -> tuple[str, str] | None:
+    if " raises " not in raw:
+        return None
+    call_part, exc_part = raw.split(" raises ", 1)
+    try:
+        call_tree = ast.parse(call_part.strip(), mode="eval")
+    except SyntaxError:
+        return None
+    return ast.unparse(call_tree.body), f"raises:{exc_part.strip()}"
+
+
+# --- callable surface (Calls/Reads consistency) -----------------------
+
+
+def validate_callable_surface(
+    *, signature: Signature, contract: Contract, function_line: int
+) -> Iterable[Diagnostic]:
+    """Check Calls/Reads against the function signature.
+
+    Rules enforced here (the syntactic well-formedness happens earlier
+    in the DSL parser):
+
+    * No duplicate ``qualified_name`` in ``Calls:``.
+    * ``self.X`` only allowed if the function declares a ``self`` parameter.
+    * Same rule for ``Reads:``.
+    """
+    _ = function_line
+    diagnostics: list[Diagnostic] = []
+    has_self = _has_self_parameter(signature)
+    seen: dict[str, int] = {}
+    for spec in contract.calls:
+        diagnostics.extend(_check_callable_spec(spec, has_self, seen))
+    diagnostics.extend(_check_attribute_specs(contract.reads, has_self))
+    return diagnostics
+
+
+def _has_self_parameter(signature: Signature) -> bool:
+    return bool(signature.parameters) and signature.parameters[0].name == "self"
+
+
+def _check_callable_spec(
+    spec: CallableSpec, has_self: bool, seen: dict[str, int]
+) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    if spec.qualified_name in seen:
+        diagnostics.append(
+            Diagnostic(
+                line=spec.line,
+                code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
+                message=(
+                    f"duplicate callable declaration: {spec.qualified_name!r} "
+                    f"(first at line {seen[spec.qualified_name]})"
+                ),
+            )
+        )
+    else:
+        seen[spec.qualified_name] = spec.line
+    if spec.qualified_name.startswith("self.") and not has_self:
+        diagnostics.append(
+            Diagnostic(
+                line=spec.line,
+                code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
+                message=(
+                    f"self-qualified callee {spec.qualified_name!r} "
+                    "but function has no 'self' parameter"
+                ),
+            )
+        )
+    return diagnostics
+
+
+def _check_attribute_specs(
+    reads: tuple[AttributeReadSpec, ...], has_self: bool
+) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    seen: dict[str, int] = {}
+    for spec in reads:
+        if spec.qualified_name in seen:
+            diagnostics.append(
+                Diagnostic(
+                    line=spec.line,
+                    code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
+                    message=(
+                        f"duplicate attribute declaration: {spec.qualified_name!r} "
+                        f"(first at line {seen[spec.qualified_name]})"
+                    ),
+                )
+            )
+        else:
+            seen[spec.qualified_name] = spec.line
+        if spec.qualified_name.startswith("self.") and not has_self:
+            diagnostics.append(
+                Diagnostic(
+                    line=spec.line,
+                    code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
+                    message=(
+                        f"self-qualified attribute {spec.qualified_name!r} "
+                        "but function has no 'self' parameter"
+                    ),
+                )
+            )
+    return diagnostics
+
+
+# --- completeness heuristic -------------------------------------------
+
+
+# Container types where "empty" is a meaningful, often-forgotten edge case.
+# Strings are *not* in this list: too many real functions precondition a
+# non-empty string via `require`, so flagging them produces too much noise.
+_CONTAINER_HINTS: Final[tuple[tuple[str, str], ...]] = (
+    ("list", "[]"),
+    ("List", "[]"),
+    ("Sequence", "[]"),
+    ("Iterable", "[]"),
+    ("tuple", "()"),
+    ("Tuple", "()"),
+    ("set", "set()"),
+    ("frozenset", "frozenset()"),
+    ("dict", "{}"),
+    ("Dict", "{}"),
+    ("Mapping", "{}"),
+)
+
+
+def validate_completeness(
+    *, signature: Signature, contract: Contract, function_line: int
+) -> Iterable[Diagnostic]:
+    """Heuristic: flag container parameters whose empty case isn't exemplified.
+
+    Maps to PDF §8 ``IncompletePromptError``. The check is intentionally
+    conservative: only emits when the *type* hints at a container and
+    *no* example uses an empty literal of that flavor. Misses are
+    acceptable — false positives are not — because the synthesizer will
+    still fail loudly downstream if behavior is genuinely under-specified.
+    """
+    if not contract.examples:
+        # MISSING_SAMPLES already covers the empty case
+        return ()
+    diagnostics: list[Diagnostic] = []
+    examples_text = " ".join(example.raw for example in contract.examples)
+    for parameter in signature.parameters:
+        diagnostic = _completeness_diagnostic(parameter, examples_text, function_line)
+        if diagnostic is not None:
+            diagnostics.append(diagnostic)
+    return diagnostics
+
+
+def _completeness_diagnostic(
+    parameter: Parameter, examples_text: str, function_line: int
+) -> Diagnostic | None:
+    annotation = parameter.annotation
+    if annotation is None:
+        return None
+    for type_hint, empty_literal in _CONTAINER_HINTS:
+        if not _annotation_mentions(annotation, type_hint):
+            continue
+        if empty_literal in examples_text:
+            return None
+        return Diagnostic(
+            line=function_line,
+            code=DiagnosticCode.INCOMPLETE_PROMPT,
+            message=(f"behavior for empty {type_hint} parameter {parameter.name!r} is unspecified"),
+        )
+    return None
+
+
+def _annotation_mentions(annotation: str, type_hint: str) -> bool:
+    # Token-aware match: avoid catching "List" inside "ListResponse"
+    try:
+        tree = ast.parse(annotation, mode="eval")
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == type_hint:
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == type_hint:
+            return True
+    return False
+
+
+# --- ordered chain -----------------------------------------------------
+
+
 DEFAULT_VALIDATORS: Final[tuple[ContractValidator, ...]] = (
     validate_examples_present,
     validate_known_parameters,
+    validate_examples_consistency,
+    validate_callable_surface,
+    validate_completeness,
 )
+
+
+def default_validators(known_globals: frozenset[str]) -> tuple[ContractValidator, ...]:
+    """Assemble the default validator chain bound to a language's globals.
+
+    The shape and order of the chain stays identical to
+    :data:`DEFAULT_VALIDATORS`; only ``validate_known_parameters`` swaps
+    its Python-builtin set for whatever the adapter exposes. Callers that
+    don't care about language can keep using ``DEFAULT_VALIDATORS``.
+    """
+    return (
+        validate_examples_present,
+        make_known_parameters_validator(known_globals),
+        validate_examples_consistency,
+        validate_callable_surface,
+        validate_completeness,
+    )

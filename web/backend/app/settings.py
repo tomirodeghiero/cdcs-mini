@@ -58,6 +58,14 @@ TAGS_METADATA: Final[list[dict[str, str]]] = [
             "contracts embedded in Python source."
         ),
     },
+    {
+        "name": "Synthesis",
+        "description": (
+            "Full contract-driven synthesis: parse → validate → LLM "
+            "(impl + tests in separate calls) → verification gates → "
+            "in-memory result. Requires `ANTHROPIC_API_KEY` server-side."
+        ),
+    },
 ]
 
 SWAGGER_UI_PARAMETERS: Final[dict[str, object]] = {
