@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cdcs_mini.synthesis.artifacts import (
+from cdcs.synthesis.artifacts import (
     ArtifactEmitter,
     LockEntry,
     Lockfile,
@@ -10,8 +10,8 @@ from cdcs_mini.synthesis.artifacts import (
     load_lock,
     save_lock,
 )
-from cdcs_mini.synthesis.orchestrator import SynthesisOutcome
-from cdcs_mini.synthesis.prompt import PromptTarget
+from cdcs.synthesis.orchestrator import SynthesisOutcome
+from cdcs.synthesis.prompt import PromptTarget
 
 
 def _outcome(function_name: str = "parse_port") -> SynthesisOutcome:

@@ -1,4 +1,4 @@
-# cdcs-mini
+# cdcs
 
 POC del compilador **Contract-Driven Code Synthesis** (CDCS): convierte
 contratos `@generate` embebidos en docstrings Python en
@@ -19,7 +19,7 @@ source.py
 
 > 📄 **Para la lectura detallada de decisiones
 > arquitectónicas, ver el PDF**:
-> [`docs/cdcs_mini_tesis_unrc.pdf`](docs/cdcs_mini_tesis_unrc.pdf).
+> [`docs/cdcs_tesis_unrc.pdf`](docs/cdcs_tesis_unrc.pdf).
 >
 > Para una vista de pájaro del código (capas, módulos, reglas de
 > dependencia, decisiones de diseño y métricas de testing) ver
@@ -120,8 +120,8 @@ compartido. Eso me dio tres ventajas que valoré desde el primer día:
 ## Estructura del repo
 
 ```
-cdcs-mini/
-├── src/cdcs_mini/        # núcleo Python
+cdcs/
+├── src/cdcs/        # núcleo Python
 │   ├── domain/           # modelos inmutables + diagnósticos
 │   ├── parsing/          # AST + DSL (con calls:/reads:)
 │   ├── validation/       # validators con Protocol
@@ -155,7 +155,7 @@ Python **3.12+** · Node.js **18+**
 ### Modo analyzer (default — el POC original)
 
 ```bash
-cdcs-mini tests/fixtures/valid_input.py --out report.json
+cdcs tests/fixtures/valid_input.py --out report.json
 ```
 
 Sin `--out`, el JSON va a *stdout*. El chrome del CLI (banner, resumen,
@@ -165,10 +165,10 @@ tabla de diagnósticos, JSON con syntax highlighting) va a *stderr*.
 
 ```bash
 # Sintetiza impl + tests para cada @generate; emite .generated.py + cdcs.lock
-cdcs-mini compile path/to/ports.py --dest path/to/
+cdcs compile path/to/ports.py --dest path/to/
 
 # CI mode: verifica que los .generated.py no estén stale ni editados a mano
-cdcs-mini check path/to/ports.py --dest path/to/
+cdcs check path/to/ports.py --dest path/to/
 ```
 
 #### LLM backends
@@ -216,7 +216,7 @@ yarn dev
 
 ## Documentación
 
-- **Tesis / presentación del proyecto**: [`docs/cdcs_mini_tesis_unrc.pdf`](docs/cdcs_mini_tesis_unrc.pdf).
+- **Tesis / presentación del proyecto**: [`docs/cdcs_tesis_unrc.pdf`](docs/cdcs_tesis_unrc.pdf).
 - **Spec original del challenge**: [`docs/cdcs_challenge_candidate_version.pdf`](docs/cdcs_challenge_candidate_version.pdf).
 - **API interactiva (Swagger)**: `http://127.0.0.1:8000/docs` con el backend corriendo. Alternativa en `/redoc`.
 - **Demo en vivo**: https://cdcs-mini-app.vercel.app (frontend) · https://cdcs-mini-api.vercel.app/docs (Swagger).

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.parsing.source_parser import SourceParser
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.parsing.source_parser import SourceParser
 
 
 def test_extracts_signature_and_generate_body(read_fixture: Callable[[str], str]) -> None:

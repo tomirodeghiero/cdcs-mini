@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from cdcs_mini.synthesis.llm import (
+from cdcs.synthesis.llm import (
     LLMError,
     PollinationsClient,
     RecordedLLMClient,
     prompt_fingerprint,
     strip_code_fences,
 )
-from cdcs_mini.synthesis.prompt import Prompt
+from cdcs.synthesis.prompt import Prompt
 
 
 def _prompt(system: str = "sys", user: str = "user", kind: str = "implementation") -> Prompt:

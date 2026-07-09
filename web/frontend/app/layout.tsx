@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CDCS Mini Report Generator",
+  title: "CDCS Report Generator",
   description: "Deterministic JSON reports from @generate behavioral contracts.",
 };
 

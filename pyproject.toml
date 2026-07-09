@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cdcs-mini"
+name = "cdcs"
 version = "0.1.0"
 description = "Deterministic parser, validator, and JSON reporter for @generate behavioral contracts embedded in Python source."
 readme = "README.md"
@@ -32,17 +32,17 @@ dev = [
     "yamllint>=1.35",
     "radon>=6.0",
 ]
-# Only needed for `cdcs-mini compile`; the analyzer/reporter and `check`
+# Only needed for `cdcs compile`; the analyzer/reporter and `check`
 # subcommand work without it. Install with: pip install -e .[synthesis]
 synthesis = [
     "anthropic>=0.40",
 ]
 
 [project.scripts]
-cdcs-mini = "cdcs_mini.cli:main"
+cdcs = "cdcs.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cdcs_mini"]
+packages = ["src/cdcs"]
 
 # ---------------------------------------------------------------------------
 # uv — managed environment + lockfile (PEP 735 dependency groups).
@@ -88,7 +88,7 @@ warn_unreachable = true
 disallow_any_unimported = true
 show_error_codes = true
 mypy_path = "src"
-packages = ["cdcs_mini", "web", "tests"]
+packages = ["cdcs", "web", "tests"]
 namespace_packages = true
 explicit_package_bases = true
 exclude = ['tests/fixtures/']
@@ -148,7 +148,7 @@ max-complexity = 10
 ban-relative-imports = "all"
 
 [tool.ruff.lint.isort]
-known-first-party = ["cdcs_mini"]
+known-first-party = ["cdcs"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -177,9 +177,9 @@ exclude = "tests/fixtures/*,**/__pycache__/*"
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
 branch = true
-source = ["src/cdcs_mini"]
+source = ["src/cdcs"]
 omit = [
-    "src/cdcs_mini/__main__.py",  # delegates to cli.main; covered indirectly
+    "src/cdcs/__main__.py",  # delegates to cli.main; covered indirectly
     "tests/fixtures/*",
 ]
 parallel = false

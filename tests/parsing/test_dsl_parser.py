@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import BehaviorKind, ExampleKind
-from cdcs_mini.parsing.dsl_parser import DSLParser, DSLParseResult
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import BehaviorKind, ExampleKind
+from cdcs.parsing.dsl_parser import DSLParser, DSLParseResult
 
 
 def _parse(body: str, *, base_line: int = 1) -> DSLParseResult:

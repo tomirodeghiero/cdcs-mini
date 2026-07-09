@@ -1,7 +1,7 @@
 {
-  "name": "cdcs-mini-ts-runtime",
+  "name": "cdcs-ts-runtime",
   "version": "0.1.0",
-  "description": "Node-side helpers that let the Python cdcs-mini pipeline parse TypeScript via the TS Compiler API. Spawned by subprocess; communicates with the parent over JSON on stdin/stdout.",
+  "description": "Node-side helpers that let the Python cdcs pipeline parse TypeScript via the TS Compiler API. Spawned by subprocess; communicates with the parent over JSON on stdin/stdout.",
   "private": true,
   "type": "module",
   "engines": {

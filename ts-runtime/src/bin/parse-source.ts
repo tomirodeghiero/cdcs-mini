@@ -17,12 +17,12 @@ async function main(): Promise<number> {
     request = JSON.parse(raw) as SourceRequest;
   } catch (err) {
     process.stderr.write(
-      `cdcs-mini ts-runtime: invalid JSON on stdin: ${(err as Error).message}\n`,
+      `cdcs ts-runtime: invalid JSON on stdin: ${(err as Error).message}\n`,
     );
     return 2;
   }
   if (typeof request.source !== "string" || typeof request.filename !== "string") {
-    process.stderr.write(`cdcs-mini ts-runtime: request must have 'source' and 'filename'\n`);
+    process.stderr.write(`cdcs ts-runtime: request must have 'source' and 'filename'\n`);
     return 2;
   }
   const parsed = parseSource(request.source, request.filename);
@@ -39,7 +39,7 @@ main().then(
     process.exit(code);
   },
   (err: unknown) => {
-    process.stderr.write(`cdcs-mini ts-runtime: fatal: ${(err as Error).message}\n`);
+    process.stderr.write(`cdcs ts-runtime: fatal: ${(err as Error).message}\n`);
     process.exit(2);
   },
 );

@@ -1,4 +1,4 @@
-# cdcs-mini — developer workflow.
+# cdcs — developer workflow.
 # Every target runs through `uv run`, so the locked dev env is the source of
 # truth. Use `make install` once after cloning; everything else is on demand.
 
@@ -49,13 +49,13 @@ test-fast:  ## pytest stopping on first failure
 
 coverage:  ## pytest with coverage, enforcing COVERAGE_MIN (default $(COVERAGE_MIN)%)
 	$(UV) run pytest \
-	    --cov=src/cdcs_mini \
+	    --cov=src/cdcs \
 	    --cov-report=term-missing \
 	    --cov-fail-under=$(COVERAGE_MIN)
 
 coverage-html:  ## pytest with coverage and HTML report under out/coverage-html/
 	$(UV) run pytest \
-	    --cov=src/cdcs_mini \
+	    --cov=src/cdcs \
 	    --cov-report=term-missing \
 	    --cov-report=html \
 	    --cov-fail-under=$(COVERAGE_MIN)

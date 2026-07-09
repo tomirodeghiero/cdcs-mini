@@ -15,29 +15,29 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from cdcs_mini.application.report_service import ReportService
-from cdcs_mini.application.synthesis_service import SynthesisService
-from cdcs_mini.language.base import LanguageAdapter
-from cdcs_mini.language.python.adapter import PythonAdapter
-from cdcs_mini.language.typescript.adapter import TypeScriptAdapter
-from cdcs_mini.language.typescript.code_parser import (
+from cdcs.application.report_service import ReportService
+from cdcs.application.synthesis_service import SynthesisService
+from cdcs.language.base import LanguageAdapter
+from cdcs.language.python.adapter import PythonAdapter
+from cdcs.language.typescript.adapter import TypeScriptAdapter
+from cdcs.language.typescript.code_parser import (
     try_parse_typescript,
     typescript_test_sanity_failures,
 )
-from cdcs_mini.reporting.base import Reporter
-from cdcs_mini.reporting.json_reporter import JsonReporter
-from cdcs_mini.synthesis.artifacts import ArtifactEmitter
-from cdcs_mini.synthesis.gates import GateChain
-from cdcs_mini.synthesis.llm import LLMClient, default_llm_client
-from cdcs_mini.synthesis.orchestrator import SynthesisOrchestrator
-from cdcs_mini.synthesis.policy import SynthesisPolicy
-from cdcs_mini.synthesis.prompt import PromptBuilder
+from cdcs.reporting.base import Reporter
+from cdcs.reporting.json_reporter import JsonReporter
+from cdcs.synthesis.artifacts import ArtifactEmitter
+from cdcs.synthesis.gates import GateChain
+from cdcs.synthesis.llm import LLMClient, default_llm_client
+from cdcs.synthesis.orchestrator import SynthesisOrchestrator
+from cdcs.synthesis.policy import SynthesisPolicy
+from cdcs.synthesis.prompt import PromptBuilder
 
 
 def select_adapter(filename: str) -> LanguageAdapter:
     """Pick the language adapter for a request based on the filename.
 
-    Mirrors :func:`cdcs_mini.cli.select_adapter` so the HTTP layer and
+    Mirrors :func:`cdcs.cli.select_adapter` so the HTTP layer and
     the CLI agree on how an upload becomes a language. Unknown
     extensions fall back to Python.
     """

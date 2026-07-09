@@ -42,7 +42,7 @@ jobs:
       - name: pytest + coverage (fail under 80%)
         run: |
           uv run pytest \
-              --cov=src/cdcs_mini \
+              --cov=src/cdcs \
               --cov-report=term-missing \
               --cov-report=xml:out/coverage.xml \
               --cov-fail-under=80

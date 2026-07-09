@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.language.typescript.source_parser import TypeScriptSourceParser
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.language.typescript.source_parser import TypeScriptSourceParser
 
 
 def _read(fixtures_dir: Path, name: str) -> str:

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from web.backend.app.dependencies import get_llm_client
 from web.backend.app.main import app
 
-from cdcs_mini.synthesis.llm import RecordedLLMClient
+from cdcs.synthesis.llm import RecordedLLMClient
 
 client = TestClient(app)
 
@@ -158,8 +158,8 @@ def test_synthesize_uses_pollinations_by_default_when_no_api_key(
 ) -> None:
     # Default factory must pick the keyless Pollinations backend when no
     # explicit provider, no Anthropic key, and no local Ollama instance.
-    from cdcs_mini.synthesis import llm as llm_module
-    from cdcs_mini.synthesis.llm import PollinationsClient, default_llm_client
+    from cdcs.synthesis import llm as llm_module
+    from cdcs.synthesis.llm import PollinationsClient, default_llm_client
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("CDCS_LLM_PROVIDER", raising=False)
@@ -171,7 +171,7 @@ def test_synthesize_uses_pollinations_by_default_when_no_api_key(
 def test_synthesize_uses_anthropic_when_provider_explicit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from cdcs_mini.synthesis.llm import AnthropicClient, default_llm_client
+    from cdcs.synthesis.llm import AnthropicClient, default_llm_client
 
     monkeypatch.setenv("CDCS_LLM_PROVIDER", "anthropic")
     assert isinstance(default_llm_client(), AnthropicClient)

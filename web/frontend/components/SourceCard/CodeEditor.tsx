@@ -63,7 +63,7 @@ export function CodeEditor({
         onMount={(editor, monaco) => {
           // Cmd/Ctrl + Enter inside the editor = same as clicking Generate
           editor.addAction({
-            id: "cdcs-mini.generate",
+            id: "cdcs.generate",
             label: "Generate report",
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
             run: () => {

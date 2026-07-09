@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import (
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import (
     AttributeReadSpec,
     BehaviorKind,
     BehaviorStep,
@@ -12,7 +12,7 @@ from cdcs_mini.domain.models import (
     Parameter,
     Signature,
 )
-from cdcs_mini.validation.validators import (
+from cdcs.validation.validators import (
     validate_callable_surface,
     validate_completeness,
     validate_examples_consistency,

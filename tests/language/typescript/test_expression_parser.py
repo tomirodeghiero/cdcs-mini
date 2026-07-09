@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cdcs_mini.language.typescript.expression_parser import TypeScriptExpressionParser
+from cdcs.language.typescript.expression_parser import TypeScriptExpressionParser
 
 
 def test_extract_identifiers_skips_callees_and_returns_args() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cdcs_mini.domain.models import (
+from cdcs.domain.models import (
     AttributeReadSpec,
     BehaviorKind,
     BehaviorStep,
@@ -11,7 +11,7 @@ from cdcs_mini.domain.models import (
     Parameter,
     Signature,
 )
-from cdcs_mini.synthesis.prompt import PromptBuilder, PromptTarget
+from cdcs.synthesis.prompt import PromptBuilder, PromptTarget
 
 
 def _signature(*params: tuple[str, str | None]) -> Signature:

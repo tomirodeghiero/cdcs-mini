@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from cdcs_mini.language.python.adapter import PythonAdapter
-from cdcs_mini.language.python.expression_parser import PythonExpressionParser
+from cdcs.language.python.adapter import PythonAdapter
+from cdcs.language.python.expression_parser import PythonExpressionParser
 
 
 def test_python_adapter_exposes_expected_metadata() -> None:

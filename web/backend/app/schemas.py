@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from cdcs_mini.reporting.schema import ReportDict
+from cdcs.reporting.schema import ReportDict
 
 _SAMPLE_SOURCE = (
     "def parse_port(value: str) -> int:\n"

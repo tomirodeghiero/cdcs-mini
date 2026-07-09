@@ -382,7 +382,7 @@ function UploadInstructions() {
     <div className="h-full rounded-xl border border-slate-200 bg-slate-50/40 p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.02] dark:text-slate-400">
       <p className="text-slate-600 dark:text-slate-300">
         Drop a Python file in the area above. The contents are sent to the{" "}
-        <span className="font-mono text-slate-800 dark:text-slate-100">cdcs-mini</span> backend;
+        <span className="font-mono text-slate-800 dark:text-slate-100">cdcs</span> backend;
         nothing is stored.
       </p>
       <ul className="mt-3 space-y-1.5 text-xs">

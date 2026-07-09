@@ -25,7 +25,7 @@ PythonFile = Annotated[UploadFile, File(..., description="Python source file")]
     summary="Analyze inline source code",
     description=(
         "Run the deterministic analyzer against a Python source string.\n\n"
-        "The response is identical to what the `cdcs-mini` CLI writes "
+        "The response is identical to what the `cdcs` CLI writes "
         "when given the same input."
     ),
     responses={

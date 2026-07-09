@@ -13,8 +13,8 @@ from typing import get_args
 
 import hypothesis.strategies as st
 
-from cdcs_mini.domain.diagnostics import Diagnostic, DiagnosticCode
-from cdcs_mini.domain.models import (
+from cdcs.domain.diagnostics import Diagnostic, DiagnosticCode
+from cdcs.domain.models import (
     AttributeReadSpec,
     BehaviorKind,
     BehaviorStep,

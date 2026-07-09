@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import (
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import (
     BehaviorKind,
     BehaviorStep,
     Contract,
@@ -10,20 +10,20 @@ from cdcs_mini.domain.models import (
     Parameter,
     Signature,
 )
-from cdcs_mini.synthesis.llm import RecordedLLMClient
-from cdcs_mini.synthesis.orchestrator import (
+from cdcs.synthesis.llm import RecordedLLMClient
+from cdcs.synthesis.orchestrator import (
     SynthesisFailure,
     SynthesisOrchestrator,
     SynthesisOutcome,
     contract_hash,
 )
-from cdcs_mini.synthesis.policy import (
+from cdcs.synthesis.policy import (
     GenerationMode,
     ProjectPolicy,
     SynthesisPolicy,
     VerificationPolicy,
 )
-from cdcs_mini.synthesis.prompt import PromptTarget
+from cdcs.synthesis.prompt import PromptTarget
 
 GOOD_IMPL = """\
 def parse_port(value: str) -> int:

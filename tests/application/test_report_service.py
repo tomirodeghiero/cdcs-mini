@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from cdcs_mini.application.report_service import ReportService
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import Report
-from cdcs_mini.reporting.json_reporter import JsonReporter
+from cdcs.application.report_service import ReportService
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import Report
+from cdcs.reporting.json_reporter import JsonReporter
 
 
 def _build(source: str) -> Report:

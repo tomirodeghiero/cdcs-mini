@@ -15,7 +15,7 @@ export function Navbar() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <a href="/" className="group flex min-w-0 items-center gap-2 sm:gap-2.5">
           <Image
-            src="/cdcs_mini_icon.png"
+            src="/cdcs_icon.png"
             alt=""
             width={344}
             height={333}
@@ -23,7 +23,7 @@ export function Navbar() {
             className="h-8 w-8 shrink-0 transition group-hover:scale-105"
           />
           <span className="truncate bg-gradient-to-r from-indigo-700 via-violet-600 to-blue-600 bg-clip-text text-base font-semibold tracking-tight text-transparent dark:from-indigo-200 dark:via-violet-300 dark:to-blue-300">
-            CDCS Mini
+            CDCS
           </span>
           <span className="hidden sm:inline">
             <VersionBadge>v0.1.0</VersionBadge>
@@ -32,7 +32,7 @@ export function Navbar() {
 
         <nav className="flex shrink-0 items-center gap-1 text-sm text-slate-600 dark:text-slate-300">
           <span className="hidden sm:contents">
-            <NavLink href="/cdcs_mini_tesis_unrc.pdf" external>
+            <NavLink href="/cdcs_tesis_unrc.pdf" external>
               Docs
             </NavLink>
             <NavLink href={`${API_URL}/docs`} external>

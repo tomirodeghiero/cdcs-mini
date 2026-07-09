@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from cdcs_mini.domain.models import (
+from cdcs.domain.models import (
     BehaviorKind,
     BehaviorStep,
     Contract,
     Parameter,
     Signature,
 )
-from cdcs_mini.validation.validators import (
+from cdcs.validation.validators import (
     DSL_MATCHERS,
     make_known_parameters_validator,
 )

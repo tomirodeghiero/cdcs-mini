@@ -1,19 +1,19 @@
 ==============================================================
-cdcs-mini — ejemplos para correr
+cdcs — ejemplos para correr
 ==============================================================
 
 Cada bloque es un archivo Python que podés pegar en
 examples/<nombre>.py y procesar con:
 
-    uv run cdcs-mini examples/<nombre>.py
+    uv run cdcs examples/<nombre>.py
 
 Para ver el JSON pretty:
 
-    uv run cdcs-mini examples/<nombre>.py | jq .
+    uv run cdcs examples/<nombre>.py | jq .
 
 Para guardar el reporte:
 
-    uv run cdcs-mini examples/<nombre>.py --out report.json
+    uv run cdcs examples/<nombre>.py --out report.json
 
 Exit codes:
     0 = limpio  ·  1 = diagnósticos detectados  ·  2 = error de uso
@@ -327,13 +327,13 @@ CÓMO USAR ESTOS EJEMPLOS
 
 2) Procesar uno:
 
-       uv run cdcs-mini examples/01_parse_port.py
+       uv run cdcs examples/01_parse_port.py
 
 3) Procesar todos y ver el código de salida:
 
        for f in examples/*.py; do
          echo "=== $f ==="
-         uv run cdcs-mini "$f" > /dev/null
+         uv run cdcs "$f" > /dev/null
          echo "exit=$?"
        done
 
@@ -347,5 +347,5 @@ CÓMO USAR ESTOS EJEMPLOS
 
        uv sync --extra synthesis
        export ANTHROPIC_API_KEY=sk-...    # o usar Ollama / Pollinations
-       uv run cdcs-mini compile examples/10_token_service.py --dest examples/_gen/
-       uv run cdcs-mini check   examples/10_token_service.py --dest examples/_gen/
+       uv run cdcs compile examples/10_token_service.py --dest examples/_gen/
+       uv run cdcs check   examples/10_token_service.py --dest examples/_gen/

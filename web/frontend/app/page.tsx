@@ -133,7 +133,7 @@ function Footer() {
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="leading-tight">
           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            CDCS Mini
+            CDCS
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
             Deterministic JSON reports from{" "}

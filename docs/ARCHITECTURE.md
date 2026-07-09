@@ -1,10 +1,10 @@
-# Arquitectura de `cdcs-mini`
+# Arquitectura de `cdcs`
 
 Este documento describe la arquitectura del prototipo **Contract-Driven
 Code Synthesis (CDCS)** desde la perspectiva de un revisor académico:
 qué hace cada capa, por qué está donde está, y cómo el código del
 repositorio refleja la especificación descrita en
-[`docs/cdcs_mini_tesis_unrc.pdf`](cdcs_mini_tesis_unrc.pdf) (en
+[`docs/cdcs_tesis_unrc.pdf`](cdcs_tesis_unrc.pdf) (en
 adelante "el PDF"). Está pensado para leerse de corrido en menos de
 quince minutos.
 
@@ -29,9 +29,9 @@ El sistema tiene tres entradas operativas:
 
 | Comando                          | Qué hace                                                                 |
 | -------------------------------- | ------------------------------------------------------------------------ |
-| `cdcs-mini src.py`               | analiza + valida + emite reporte JSON (sin LLM)                          |
-| `cdcs-mini compile src.py`       | sintetiza implementación y tests, escribe `*.generated.py` + `cdcs.lock` |
-| `cdcs-mini check src.py`         | modo CI: verifica que los artefactos están sincronizados con el contrato |
+| `cdcs src.py`               | analiza + valida + emite reporte JSON (sin LLM)                          |
+| `cdcs compile src.py`       | sintetiza implementación y tests, escribe `*.generated.py` + `cdcs.lock` |
+| `cdcs check src.py`         | modo CI: verifica que los artefactos están sincronizados con el contrato |
 
 ---
 
@@ -66,8 +66,8 @@ source.py
 
 Cada nodo del pipeline tiene un módulo dedicado y un punto de entrada
 estable. La orquestación lineal de estos pasos vive en
-`src/cdcs_mini/application/synthesis_service.py` y
-`src/cdcs_mini/synthesis/orchestrator.py`.
+`src/cdcs/application/synthesis_service.py` y
+`src/cdcs/synthesis/orchestrator.py`.
 
 ### 2.1 Mapeo a las secciones del PDF
 
@@ -88,7 +88,7 @@ estable. La orquestación lineal de estos pasos vive en
 
 ## 3. Capas
 
-El paquete `src/cdcs_mini/` está organizado en capas concéntricas. La
+El paquete `src/cdcs/` está organizado en capas concéntricas. La
 regla es estricta: **las dependencias siempre apuntan hacia adentro**.
 La capa `domain` no importa nada del proyecto; `application` puede
 importar de cualquier capa interior pero no al revés.
@@ -339,7 +339,7 @@ garantizando salida determinista del reporter.
 
 ### 8.1 Agregar un nuevo lenguaje
 
-1. Crear `src/cdcs_mini/language/{lang}/` con cuatro piezas:
+1. Crear `src/cdcs/language/{lang}/` con cuatro piezas:
    - `expression_parser.py` (implementa `ExpressionParser`)
    - `source_parser.py` (implementa `SourceParserProtocol`)
    - `adapter.py` (implementa `LanguageAdapter`)
@@ -372,9 +372,9 @@ debería tocarse.
 
 ## 9. Referencias
 
-- **Especificación de la tesis:** `docs/cdcs_mini_tesis_unrc.pdf`.
+- **Especificación de la tesis:** `docs/cdcs_tesis_unrc.pdf`.
 - **Especificación original del challenge:** `docs/cdcs_challenge_candidate_version.pdf`.
-- **Plantilla LaTeX de la tesis:** `docs/cdcs_mini_tesis_unrc.tex`.
+- **Plantilla LaTeX de la tesis:** `docs/cdcs_tesis_unrc.tex`.
 - **Propuesta de Trabajo Final** (formato UNRC): ver carta de propuesta.
 
 Para una guía paso a paso de cómo usar el CLI y los ejemplos, ver el

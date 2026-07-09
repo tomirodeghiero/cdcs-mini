@@ -3,14 +3,14 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable
 
-from cdcs_mini.domain.models import (
+from cdcs.domain.models import (
     AttributeReadSpec,
     CallableSpec,
     Contract,
     Parameter,
     Signature,
 )
-from cdcs_mini.synthesis.gates import (
+from cdcs.synthesis.gates import (
     CalleeAllowListGate,
     Candidate,
     ComplexityGate,
@@ -18,12 +18,12 @@ from cdcs_mini.synthesis.gates import (
     SecurityGate,
     StructureGate,
 )
-from cdcs_mini.synthesis.policy import (
+from cdcs.synthesis.policy import (
     ProjectPolicy,
     SynthesisPolicy,
     VerificationPolicy,
 )
-from cdcs_mini.synthesis.prompt import PromptTarget
+from cdcs.synthesis.prompt import PromptTarget
 
 MakeCandidate = Callable[..., Candidate]
 

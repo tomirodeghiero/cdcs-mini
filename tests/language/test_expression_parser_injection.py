@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cdcs_mini.domain.models import BehaviorKind, Parameter
-from cdcs_mini.parsing.dsl_parser import DSLParser
+from cdcs.domain.models import BehaviorKind, Parameter
+from cdcs.parsing.dsl_parser import DSLParser
 
 
 @dataclass

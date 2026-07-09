@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Vercel ships our whole repo into the function bundle, but only the installed
 # wheel ends up on sys.path. Add the project root and src/ so the existing
-# ``web.backend.app.main`` and ``cdcs_mini.*`` imports resolve.
+# ``web.backend.app.main`` and ``cdcs.*`` imports resolve.
 _root = Path(__file__).resolve().parent.parent
 for extra in (_root, _root / "src"):
     if str(extra) not in sys.path:

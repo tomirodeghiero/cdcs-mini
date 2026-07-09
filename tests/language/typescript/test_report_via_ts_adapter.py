@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from cdcs_mini.application.report_service import ReportService
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import Report
-from cdcs_mini.language.typescript.adapter import TypeScriptAdapter
-from cdcs_mini.language.typescript.source_parser import TypeScriptSourceParser
-from cdcs_mini.parsing.dsl_parser import DSLParser
-from cdcs_mini.validation.validators import default_validators
+from cdcs.application.report_service import ReportService
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import Report
+from cdcs.language.typescript.adapter import TypeScriptAdapter
+from cdcs.language.typescript.source_parser import TypeScriptSourceParser
+from cdcs.parsing.dsl_parser import DSLParser
+from cdcs.validation.validators import default_validators
 
 
 def _ts_report(source: str, *, filename: str) -> Report:

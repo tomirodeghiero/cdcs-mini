@@ -22,12 +22,12 @@ from web.backend.app.schemas import (
     SynthesizeResponse,
 )
 
-from cdcs_mini.application.synthesis_service import (
+from cdcs.application.synthesis_service import (
     CompiledFunction,
 )
-from cdcs_mini.language.base import LanguageAdapter
-from cdcs_mini.synthesis.artifacts import Lockfile
-from cdcs_mini.synthesis.llm import LLMError
+from cdcs.language.base import LanguageAdapter
+from cdcs.synthesis.artifacts import Lockfile
+from cdcs.synthesis.llm import LLMError
 
 router = APIRouter(prefix="/synthesize", tags=["Synthesis"])
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import hypothesis.strategies as st
 from hypothesis import given, settings
 
-from cdcs_mini.parsing.dsl_parser import DSLParser
+from cdcs.parsing.dsl_parser import DSLParser
 
 # Restrict to printable text without control characters; the DSL is
 # whitespace-significant and we want the property tests to focus on

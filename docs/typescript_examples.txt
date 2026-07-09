@@ -8,7 +8,7 @@ contrato @generate. Estructura: behavior / examples / constraints
 
 Probar cualquier ejemplo guardándolo en un .ts y corriendo:
 
-    cdcs-mini path/to/file.ts
+    cdcs path/to/file.ts
 
 
 ----------------------------------------------------------------

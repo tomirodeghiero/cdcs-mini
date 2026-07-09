@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cdcs_mini.application.report_service import ReportService
-from cdcs_mini.application.synthesis_service import SynthesisService
-from cdcs_mini.synthesis.artifacts import LOCK_FILENAME, ArtifactEmitter, Lockfile
-from cdcs_mini.synthesis.llm import RecordedLLMClient
-from cdcs_mini.synthesis.orchestrator import SynthesisOrchestrator
-from cdcs_mini.synthesis.policy import SynthesisPolicy
+from cdcs.application.report_service import ReportService
+from cdcs.application.synthesis_service import SynthesisService
+from cdcs.synthesis.artifacts import LOCK_FILENAME, ArtifactEmitter, Lockfile
+from cdcs.synthesis.llm import RecordedLLMClient
+from cdcs.synthesis.orchestrator import SynthesisOrchestrator
+from cdcs.synthesis.policy import SynthesisPolicy
 
 VALID_SOURCE = '''\
 def parse_port(value: str) -> int:

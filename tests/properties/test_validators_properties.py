@@ -14,8 +14,8 @@ from __future__ import annotations
 import hypothesis.strategies as st
 from hypothesis import given, settings
 
-from cdcs_mini.domain.diagnostics import DiagnosticCode
-from cdcs_mini.domain.models import (
+from cdcs.domain.diagnostics import DiagnosticCode
+from cdcs.domain.models import (
     BehaviorKind,
     BehaviorStep,
     Contract,
@@ -24,7 +24,7 @@ from cdcs_mini.domain.models import (
     Parameter,
     Signature,
 )
-from cdcs_mini.validation.validators import (
+from cdcs.validation.validators import (
     validate_examples_consistency,
     validate_known_parameters,
 )

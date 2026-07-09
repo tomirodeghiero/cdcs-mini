@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cdcs_mini.cli import main
+from cdcs.cli import main
 
 
 def test_cli_writes_report_file(tmp_path: Path, fixtures_dir: Path) -> None:

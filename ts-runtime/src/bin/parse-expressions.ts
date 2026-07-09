@@ -18,12 +18,12 @@ async function main(): Promise<number> {
     request = JSON.parse(raw) as ExpressionRequest;
   } catch (err) {
     process.stderr.write(
-      `cdcs-mini ts-runtime: invalid JSON on stdin: ${(err as Error).message}\n`,
+      `cdcs ts-runtime: invalid JSON on stdin: ${(err as Error).message}\n`,
     );
     return 2;
   }
   if (!Array.isArray(request.operations)) {
-    process.stderr.write(`cdcs-mini ts-runtime: request must have an 'operations' array\n`);
+    process.stderr.write(`cdcs ts-runtime: request must have an 'operations' array\n`);
     return 2;
   }
   const response: ExpressionResponse = {
@@ -38,7 +38,7 @@ main().then(
     process.exit(code);
   },
   (err: unknown) => {
-    process.stderr.write(`cdcs-mini ts-runtime: fatal: ${(err as Error).message}\n`);
+    process.stderr.write(`cdcs ts-runtime: fatal: ${(err as Error).message}\n`);
     process.exit(2);
   },
 );

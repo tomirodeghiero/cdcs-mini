@@ -1,5 +1,5 @@
 """Tic-tac-toe ports — contracts only. Implementations are synthesized
-by `cdcs-mini compile tictactoe.py --dest out/`.
+by `cdcs compile tictactoe.py --dest out/`.
 
 Board: a 9-tuple of "X" / "O" / "" laid out row-major.
 """

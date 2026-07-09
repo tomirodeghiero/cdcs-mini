@@ -15,8 +15,8 @@ import json
 
 from hypothesis import given, settings
 
-from cdcs_mini.domain.models import Report
-from cdcs_mini.reporting.json_reporter import JsonReporter
+from cdcs.domain.models import Report
+from cdcs.reporting.json_reporter import JsonReporter
 from tests.properties._strategies import reports
 
 

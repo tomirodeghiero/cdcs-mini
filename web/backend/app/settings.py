@@ -18,17 +18,17 @@ CORS_ORIGINS: Final[tuple[str, ...]] = (
     "http://127.0.0.1:3000",
 )
 
-API_TITLE: Final[str] = "cdcs-mini API"
+API_TITLE: Final[str] = "cdcs API"
 API_VERSION: Final[str] = "0.1.0"
 API_SUMMARY: Final[str] = "Deterministic @generate contract reporter."
 
 API_DESCRIPTION: Final[str] = """
-HTTP wrapper around **cdcs-mini** — a deterministic parser, validator and
+HTTP wrapper around **cdcs** — a deterministic parser, validator and
 JSON reporter for behavioral contracts (`@generate`) embedded in Python
 source code.
 
 The same `ReportService` powers the CLI
-(`cdcs-mini input.py --out report.json`) and these endpoints, so the JSON
+(`cdcs input.py --out report.json`) and these endpoints, so the JSON
 returned here is byte-for-byte identical to what the CLI writes.
 
 ### Quick reference
