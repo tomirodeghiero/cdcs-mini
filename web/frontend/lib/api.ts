@@ -22,7 +22,24 @@ export type ReportPayload = {
   errors: Diagnostic[];
 };
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// Resolves the API base URL at build time.
+//   - `NEXT_PUBLIC_API_URL` wins when set, EXCEPT if it points at the
+//     "cdcs-mini-api.vercel.app" alias — that's a stale sibling Vercel
+//     project (missing the /synthesize router). Remap defensively so the
+//     UI keeps working even if the env var in the dashboard is out of date.
+//   - `next dev`   → local FastAPI on 127.0.0.1:8000
+//   - `next build` → the fresh backend at cdcs-mini.vercel.app
+const CORRECT_PROD_API = "https://cdcs-mini.vercel.app";
+const STALE_PROD_API = "https://cdcs-mini-api.vercel.app";
+
+function resolveApiUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (explicit) return explicit === STALE_PROD_API ? CORRECT_PROD_API : explicit;
+  if (process.env.NODE_ENV === "production") return CORRECT_PROD_API;
+  return "http://127.0.0.1:8000";
+}
+
+export const API_URL = resolveApiUrl();
 
 export class ApiError extends Error {
   readonly status: number;
