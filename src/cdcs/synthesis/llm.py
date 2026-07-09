@@ -33,8 +33,10 @@ DEFAULT_POLLINATIONS_MODEL: Final[str] = "openai"  # = GPT-4o on Pollinations
 POLLINATIONS_ENDPOINT: Final[str] = "https://text.pollinations.ai/openai"
 DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5-coder:7b"
 OLLAMA_ENDPOINT: Final[str] = "http://localhost:11434/api/chat"
+DEFAULT_CEREBRAS_MODEL: Final[str] = "qwen-3-coder-480b"
+CEREBRAS_ENDPOINT: Final[str] = "https://api.cerebras.ai/v1/chat/completions"
 
-ProviderName = Literal["pollinations", "anthropic", "ollama"]
+ProviderName = Literal["pollinations", "anthropic", "ollama", "cerebras"]
 
 
 class LLMError(Exception):
@@ -258,6 +260,97 @@ class OllamaClient:
         raise LLMError("Ollama returned an empty completion")
 
 
+# --- CerebrasClient (public, keyed, fast — recommended for prod demo) ---
+
+
+@dataclass(frozen=True, slots=True)
+class CerebrasClient:
+    """OpenAI-compatible client against ``api.cerebras.ai``.
+
+    Reads the API key from ``CEREBRAS_API_KEY`` at call time. Recommended
+    default for the public web demo: Qwen 3 Coder 480B on Cerebras
+    inference silicon is on-par with GPT-4/Claude for codegen and returns
+    in a few seconds — a much better story than Pollinations' 15-second
+    anonymous rate limit for a live thesis defense.
+
+    Sign up at cerebras.ai for a free key (no credit card).
+    """
+
+    model: str = DEFAULT_CEREBRAS_MODEL
+    endpoint: str = CEREBRAS_ENDPOINT
+    timeout_seconds: float = 90.0
+    temperature: float = 0.0
+    max_tokens: int = 4096
+    max_retries: int = 3
+    retry_backoff_seconds: float = 2.0
+
+    def complete(self, prompt: Prompt) -> str:
+        api_key = os.environ.get("CEREBRAS_API_KEY", "").strip()
+        if not api_key:
+            raise LLMError(
+                "CEREBRAS_API_KEY not set. Get a free key at "
+                "https://cloud.cerebras.ai and export it before calling."
+            )
+        body = {
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "messages": [
+                {"role": "system", "content": prompt.system},
+                {"role": "user", "content": prompt.user},
+            ],
+        }
+        payload = json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(
+            self.endpoint,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "User-Agent": "cdcs/0.1.0 (+https://github.com/tomirodeghiero/cdcs-mini)",
+            },
+            method="POST",
+        )
+        raw = self._post_with_retry(request)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise LLMError(f"Cerebras response was not JSON: {raw[:200]!r}") from exc
+        text = _extract_openai_text(parsed)
+        if not text:
+            raise LLMError("Cerebras returned an empty completion")
+        return strip_code_fences(text)
+
+    def _post_with_retry(self, request: urllib.request.Request) -> str:
+        last_error: LLMError | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    body: bytes = response.read()
+                    return body.decode("utf-8")
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:500]
+                # 401/403 are auth issues — no point retrying.
+                if exc.code in {429, 502, 503, 504} and attempt < self.max_retries:
+                    time.sleep(self.retry_backoff_seconds * (2**attempt))
+                    last_error = LLMError(
+                        f"Cerebras HTTP {exc.code} (retrying): "
+                        f"{detail.strip()[:120] or exc.reason}"
+                    )
+                    continue
+                raise LLMError(
+                    f"Cerebras returned HTTP {exc.code}: {detail.strip() or exc.reason}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                if attempt < self.max_retries:
+                    time.sleep(self.retry_backoff_seconds * (2**attempt))
+                    last_error = LLMError(f"Cerebras URL error: {exc.reason}")
+                    continue
+                raise LLMError(f"Cerebras request failed: {exc.reason}") from exc
+        raise last_error or LLMError("Cerebras: retry budget exhausted")
+
+
 def _ollama_is_reachable() -> bool:
     try:
         request = urllib.request.Request("http://localhost:11434/api/tags", method="GET")
@@ -292,35 +385,51 @@ def _extract_openai_text(parsed: object) -> str:
 # --- factory --------------------------------------------------------
 
 
+_PROVIDER_FACTORY: Final[dict[str, tuple[type[LLMClient], str]]] = {
+    "anthropic": (AnthropicClient, DEFAULT_MODEL),
+    "cerebras": (CerebrasClient, DEFAULT_CEREBRAS_MODEL),
+    "ollama": (OllamaClient, DEFAULT_OLLAMA_MODEL),
+    "pollinations": (PollinationsClient, DEFAULT_POLLINATIONS_MODEL),
+}
+
+
 def default_llm_client(model: str | None = None) -> LLMClient:
     """Pick the right client for the current environment.
 
     Resolution order:
 
-    1. ``CDCS_LLM_PROVIDER`` env var (``anthropic`` | ``ollama`` |
-       ``pollinations``) takes precedence if set explicitly.
+    1. ``CDCS_LLM_PROVIDER`` env var (``anthropic`` | ``cerebras`` |
+       ``ollama`` | ``pollinations``) takes precedence if set explicitly.
     2. ``ANTHROPIC_API_KEY`` in env → Anthropic (caller went out of
        their way to configure it).
-    3. ``ollama serve`` running locally → Ollama (offline, no limits).
-    4. Fallback: Pollinations. Public, keyless, works out of the box,
-       but rate-limited and occasionally flaky.
+    3. ``CEREBRAS_API_KEY`` in env → Cerebras with Qwen 3 Coder 480B.
+       This is the recommended public-demo backend: keyed but free,
+       genuinely capable, and answers in seconds (unlike Pollinations'
+       anonymous rate limit).
+    4. ``ollama serve`` running locally → Ollama (offline, no limits).
+    5. Fallback: Pollinations. Public, keyless, works out of the box,
+       but rate-limited and only offers ``openai-fast`` in the anonymous
+       tier as of 2026.
 
     The model can be overridden with ``CDCS_MODEL`` or the explicit
     ``model`` argument (the argument wins over the env var).
     """
     provider = os.environ.get("CDCS_LLM_PROVIDER", "").strip().lower()
     explicit_model = (model or os.environ.get("CDCS_MODEL", "")).strip()
-    if provider == "anthropic":
-        return AnthropicClient(model=explicit_model or DEFAULT_MODEL)
-    if provider == "ollama":
-        return OllamaClient(model=explicit_model or DEFAULT_OLLAMA_MODEL)
-    if provider == "pollinations":
-        return PollinationsClient(model=explicit_model or DEFAULT_POLLINATIONS_MODEL)
+    resolved = provider or _autodetect_provider()
+    factory, default_model = _PROVIDER_FACTORY[resolved]
+    return factory(model=explicit_model or default_model)  # type: ignore[call-arg]
+
+
+def _autodetect_provider() -> str:
+    """Choose a provider when ``CDCS_LLM_PROVIDER`` isn't set explicitly."""
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return AnthropicClient(model=explicit_model or DEFAULT_MODEL)
+        return "anthropic"
+    if os.environ.get("CEREBRAS_API_KEY"):
+        return "cerebras"
     if _ollama_is_reachable():
-        return OllamaClient(model=explicit_model or DEFAULT_OLLAMA_MODEL)
-    return PollinationsClient(model=explicit_model or DEFAULT_POLLINATIONS_MODEL)
+        return "ollama"
+    return "pollinations"
 
 
 # --- RecordedLLMClient (for tests / deterministic replay) -----------

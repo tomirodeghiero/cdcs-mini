@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-
 import { GitHubIcon, MoonIcon, SunIcon } from "@/components/icons";
 import { API_URL } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
@@ -14,14 +12,6 @@ export function Navbar() {
     <header className="border-b border-slate-200/80 bg-white/70 backdrop-blur dark:border-white/5 dark:bg-slate-950/70">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <a href="/" className="group flex min-w-0 items-center gap-2 sm:gap-2.5">
-          <Image
-            src="/cdcs_icon.png"
-            alt=""
-            width={344}
-            height={333}
-            priority
-            className="h-8 w-8 shrink-0 transition group-hover:scale-105"
-          />
           <span className="truncate bg-gradient-to-r from-indigo-700 via-violet-600 to-blue-600 bg-clip-text text-base font-semibold tracking-tight text-transparent dark:from-indigo-200 dark:via-violet-300 dark:to-blue-300">
             CDCS
           </span>

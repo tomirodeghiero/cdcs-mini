@@ -63,7 +63,8 @@ TAGS_METADATA: Final[list[dict[str, str]]] = [
         "description": (
             "Full contract-driven synthesis: parse → validate → LLM "
             "(impl + tests in separate calls) → verification gates → "
-            "in-memory result. Requires `ANTHROPIC_API_KEY` server-side."
+            "in-memory result. Public demo runs on Cerebras "
+            "(`qwen-3-coder-480b`); set `CDCS_LLM_PROVIDER` to override."
         ),
     },
 ]

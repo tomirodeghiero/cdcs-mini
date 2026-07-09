@@ -1,0 +1,469 @@
+================================================================================
+PROPUESTA DE TRABAJO FINAL
+Licenciatura en Ciencias de la Computación
+Universidad Nacional de Río Cuarto
+================================================================================
+
+Título:      Contract-Driven Code Synthesis (CDCS)
+             Un compilador de contratos para generación verificable de código
+             con modelos de lenguaje de gran escala.
+
+Alumno:      Tomás Rodeghiero
+Director:    Francisco Bavera
+Codirector:  Daniel Gutson
+
+
+================================================================================
+RESUMEN
+================================================================================
+
+Se propone el diseño e implementación de CDCS (Contract-Driven Code Synthesis),
+un sistema de tipo compilador que utiliza modelos de lenguaje de gran escala
+(Large Language Models, LLMs) como motores de generación de código restringidos
+por contratos conductuales explícitos.
+
+A diferencia del flujo habitual de "vibe coding" — en el que el modelo genera
+código libremente a partir de prompts extensos y ambiguos — CDCS parte de una
+especificación acotada compuesta por la firma de la función, su comportamiento
+esperado, ejemplos ejecutables, errores contemplados y restricciones de
+implementación, y trata la salida del modelo como código no confiable hasta que
+atraviesa una cadena de compuertas de verificación estática y dinámica.
+
+La contribución central es reformular la generación asistida por LLM no como
+una interacción libre entre desarrollador y modelo, sino como la ejecución
+determinista de un pipeline análogo al de un compilador: parseo, validación del
+contrato, síntesis controlada, verificación, y emisión de artefactos con
+procedencia trazable.
+
+
+================================================================================
+1. INTRODUCCIÓN Y PLANTEO DEL PROBLEMA
+================================================================================
+
+1.1. El problema aparente: adopción indiscriminada de código generado por LLMs
+------------------------------------------------------------------------------
+
+La incorporación masiva de LLMs (GitHub Copilot, Claude Code, Cursor, ChatGPT,
+entre otros) en el flujo de desarrollo ha instalado una práctica de riesgo
+creciente: aceptar código generado sin comprender los supuestos que el modelo
+realizó, los casos límite que no contempló, o las operaciones peligrosas que
+puede introducir. Esta forma de trabajo — conocida informalmente como
+*vibe coding* — se apoya en prompts extensos que incluyen archivos completos,
+resúmenes del repositorio, decisiones arquitectónicas previas o historiales
+enteros de conversación.
+
+El resultado es un código que suele compilar y a veces pasa los tests que el
+propio modelo generó, pero cuya corrección efectiva es un artículo de fe.
+
+Sin embargo, decir "los LLMs generan código de baja calidad" es un diagnóstico
+insuficiente. La baja calidad no es un fenómeno monolítico ni fortuito: es la
+manifestación observable de una serie de fenómenos internos y contextuales bien
+documentados en la literatura reciente. Comprender esos fenómenos es requisito
+para diseñar una solución que no sea meramente una capa cosmética sobre el
+problema.
+
+
+1.2. La causa subyacente: fenómenos de degradación en el contexto de los LLMs
+------------------------------------------------------------------------------
+
+Los LLMs sufren un conjunto de fenómenos de degradación cuando el contexto se
+vuelve largo, ambiguo o iterativo. Aunque no son fallos técnicos en sentido
+estricto, explican por qué el código generado tiende a divergir de la intención
+original del desarrollador. Los más relevantes para esta propuesta son:
+
+- Semantic drift / Context drift.
+  El modelo se aleja gradualmente del objetivo original sin que ningún mensaje
+  del desarrollador se lo indique. Un pedido inicial ("implementá esta función
+  según este contrato") puede terminar, treinta turnos después, discutiendo
+  detalles de librerías o estilos que nada tienen que ver con la especificación.
+
+- Weak grounding.
+  El modelo empieza a apoyarse más en su propio texto previamente generado que
+  en los hechos originales. Un concepto que se estableció con precisión — por
+  ejemplo, "el parámetro `port` es un entero en [1, 65535]" — se generaliza
+  silenciosamente hacia una versión más laxa a medida que la conversación
+  avanza.
+
+- Constraint forgetting.
+  Restricciones enunciadas explícitamente ("no uses variables globales
+  mutables", "no llames a APIs de red", "el resultado debe ser determinista")
+  pierden saliencia frente a contexto más reciente y son violadas sin
+  advertencia.
+
+- Terminology mutation.
+  Términos técnicos con significado estable en el contrato mutan a lo largo de
+  la interacción. "Contrato" puede empezar como especificación conductual,
+  deslizarse a firma tipada, luego a docstring, y finalmente a "documentación
+  general". El modelo mantiene coherencia interna pero pierde alineación con
+  el vocabulario del proyecto.
+
+- Self-reinforcement.
+  Si el modelo comete un pequeño error, las respuestas subsiguientes lo tratan
+  como hecho establecido. La probabilidad de corrección disminuye con el
+  tiempo, no aumenta.
+
+- Hallucinated continuity.
+  El modelo rellena huecos con transiciones plausibles. En lugar de decir "ya
+  no sé por qué elegimos B", inventa una racionalización coherente. El
+  desarrollador rara vez lo detecta.
+
+- Recency bias.
+  La información más reciente domina estadísticamente sobre la más antigua,
+  aunque esta última sea más importante para la decisión que hay que tomar.
+
+- Salience inversion y anchor loss.
+  Detalles menores recientes se vuelven "ruidosos" mientras que decisiones
+  arquitectónicas fundamentales tomadas al inicio pierden peso o desaparecen
+  del razonamiento.
+
+Estos fenómenos han sido caracterizados sistemáticamente en la literatura
+reciente y se manifiestan de forma directa en el código generado.
+
+
+1.3. La manifestación empírica: taxonomía de bugs en código generado por LLMs
+------------------------------------------------------------------------------
+
+Los fenómenos anteriores no son abstractos: se traducen en categorías concretas
+y medibles de errores en el código emitido. La literatura empírica reciente ha
+catalogado estos errores con rigor.
+
+Wang et al. (2024) [1] analizaron 558 soluciones incorrectas producidas por
+seis LLMs sobre HumanEval y derivaron una taxonomía con 13 características
+semánticas y 14 sintácticas. Sus hallazgos son concluyentes:
+
+  - La categoría dominante es "wrong (logical) direction": el modelo
+    malinterpreta el problema y produce código que no aborda lo pedido, aun
+    cuando compile y pase algunos casos.
+  - Los errores se concentran en bloques enteros de código: más del 40% son
+    "incorrect code block" o "missing code block". Reparar el código requiere
+    reestructuración sustancial, no ediciones menores: la mediana de la
+    distancia de Levenshtein al ground truth supera los 100 tokens, y el
+    84,89% de las soluciones incorrectas requiere más de 50 ediciones.
+  - Con prompts largos (más de 150 palabras), el 64% del código generado
+    degenera en "garbage code": sintácticamente plausible pero funcionalmente
+    sin sentido.
+
+Dou et al. (2024) [2] extendieron el análisis a nueve LLMs sobre HumanEval+,
+MBPP+, APPS+ y un benchmark real (RWPB) que ellos construyeron manualmente
+para evitar data leakage. Su taxonomía distingue tres categorías primarias:
+
+  - Bugs sintácticos (proporción baja): estructuras incompletas, indentación
+    incorrecta, errores de import.
+  - Bugs de tiempo de ejecución: API misuse (uso incorrecto de atributos,
+    tipos o valores en llamadas), variables no definidas, chequeos de borde
+    faltantes, argumentos incorrectos.
+  - Bugs funcionales (proporción dominante): el código ejecuta pero no cumple
+    la especificación. Aquí concentran malentendidos lógicos, alucinaciones
+    (código plausible pero semánticamente sin sentido) y errores de formato de
+    entrada/salida.
+
+Un hallazgo particularmente ilustrativo es que los LLMs tienden a generar más
+comentarios en el código incorrecto que en el correcto: el modelo, ante
+incertidumbre, verbaliza su intento de razonamiento — pero esa verbalización
+no se traduce en corrección. Otro hallazgo: en proyectos del mundo real
+(RWPB), la proporción de bugs de runtime — especialmente argumentos
+incorrectos y chequeos de borde faltantes — es significativamente mayor que en
+benchmarks académicos, lo cual sugiere que el problema es más severo fuera del
+laboratorio.
+
+En código, estos fenómenos se especializan en patrones documentados con más
+detalle. Los mismos fenómenos de degradación se manifiestan como:
+
+  - Deriva arquitectónica. El código mantiene corrección sintáctica local pero
+    viola la arquitectura global (se pidió un patrón State y el modelo
+    introduce ramas condicionales dispersas).
+  - Acreción de parches. En lugar de repensar la estructura, el modelo acumula
+    ramas if especiales para cada caso que se le señala. El resultado es
+    "código que funciona pero es basura estructurada".
+  - Erosión de límites de tipo / sistema. Parser y evaluador se mezclan,
+    modelo de dominio y DTO se contaminan, capas de CLI invaden la librería.
+  - Alucinación de APIs. El modelo llama a funciones que no existen, o combina
+    APIs de librerías distintas creando quimeras plausibles.
+  - Teatro de manejo de errores. `try/except Exception` que capturan todo,
+    imprimen y siguen. El código parece robusto y en realidad enmascara
+    fallos.
+  - "Compila" reemplaza a "es correcto". El modelo trata el éxito de
+    compilación como evidencia fuerte de corrección, cuando en realidad es
+    sólo evidencia de bien-formación sintáctica.
+
+Du et al. (2025) [3] sintetizan estos hallazgos en una posición: los
+fenómenos anteriores son manifestaciones de una brecha semántica fundamental
+entre la naturaleza estadística de los LLMs y las exigencias formales de los
+lenguajes de programación. Su tesis, alineada con la de este trabajo, es que
+salvar esa brecha requiere integrar de manera principiada técnicas clásicas
+de lenguajes de programación — representaciones estructuradas (AST, CFG, DFG,
+IR), sistemas de tipos, métodos formales — no como reemplazo del LLM, sino
+como andamiaje que restringe y verifica su salida.
+
+
+1.4. Hipótesis del trabajo
+------------------------------------------------------------------------------
+
+De lo anterior se desprende que el problema no es que los LLMs sean incapaces
+de generar código útil, sino que la interfaz habitual — chat libre, prompts
+extensos, ausencia de verificación explícita — está estructuralmente mal
+diseñada para las propiedades de estos modelos. El chat libre amplifica
+context drift; el prompt extenso amplifica constraint forgetting; la ausencia
+de verificación amplifica hallucinated continuity y wrong logical direction;
+la iteración por parches amplifica patch accretion.
+
+La hipótesis de este trabajo se enuncia entonces así:
+
+    Si se reformula la generación asistida por LLM como la ejecución de un
+    pipeline análogo a un compilador — con un contrato explícito como fuente
+    de verdad, un contexto acotado y autocontenido, generación separada de
+    código y de tests, y compuertas de verificación estática y dinámica antes
+    de aceptar cualquier artefacto — entonces es posible obtener código que
+    satisfaga los requisitos conductuales especificados, con procedencia
+    trazable, sin depender del razonamiento inconsistente del modelo sobre
+    contexto largo o ambiguo.
+
+Esta hipótesis implica una decisión de diseño fundamental: el contrato
+conductual escrito por el desarrollador, y no el código generado por el
+modelo, es la fuente de verdad del sistema. El código generado es un artefacto
+derivado, no confiable hasta prueba en contrario. Esa inversión — código como
+salida no confiable, contrato como entrada confiable — es lo que permite
+razonar sobre el sistema con las herramientas clásicas de la ingeniería de
+software: verificación, design by contract, análisis estático, testing
+determinista.
+
+
+1.5. Cómo CDCS aborda cada fenómeno
+------------------------------------------------------------------------------
+
+Cada fenómeno descripto tiene una contramedida específica en el diseño de
+CDCS:
+
+  Context drift / scope creep
+    -> Contrato acotado y autocontenido. Se envía al modelo únicamente la
+       información necesaria para sintetizar una función; el costo y la
+       complejidad de la generación dependen del problema puntual, no del
+       tamaño del proyecto.
+
+  Constraint forgetting
+    -> Restricciones enumeradas explícitamente en la sección `constraints`
+       del contrato. Se validan antes de invocar al modelo y se re-envían en
+       cada reintento; nunca "flotan" en un historial de conversación.
+
+  Weak grounding / terminology mutation
+    -> El contrato vive embebido en el docstring, junto a la firma. La firma
+       tipada es la única fuente de nombres, tipos y valor de retorno; no hay
+       lugar donde el vocabulario pueda mutar sin ser detectado.
+
+  Hallucinated continuity / wrong logical direction
+    -> Los ejemplos del contrato son ejecutables. La compuerta de tests los
+       aplica y rechaza cualquier implementación que no los satisfaga. El
+       "sonar bien" no es suficiente: hay que pasar los ejemplos.
+
+  Self-reinforcement
+    -> El bucle de reparación no realimenta la conversación previa. Cada
+       iteración parte del contrato limpio, con el error específico de la
+       compuerta como única diferencia respecto al pedido original.
+
+  API hallucination
+    -> Compuertas de análisis estático (mypy / pyright) y de linting
+       (ruff) rechazan referencias a APIs inexistentes.
+
+  Garbage code / meaningless snippets
+    -> Compuerta de tests obligatoria, más verificación de complejidad
+       (radon). El código que no reduce el problema es rechazado.
+
+  "Compila" != "es correcto"
+    -> Múltiples compuertas obligatorias en cadena: formato, lint, tipo,
+       tests, complejidad, y análisis AST de operaciones prohibidas. El éxito
+       de compilación es sólo la primera de varias exigencias.
+
+  Patch accretion
+    -> Presupuesto acotado de reintentos. Si N iteraciones no producen código
+       que pase, se emite `ExceededTestIterationsError`. No se acepta el
+       "casi funciona".
+
+  Test drift
+    -> La generación de tests se realiza en una llamada separada al modelo,
+       alimentada únicamente por el contrato (no por la implementación). El
+       modelo no puede tunear los tests para que su propia implementación
+       pase.
+
+  Unsafe generated code
+    -> Compuerta AST dedicada que detecta `eval`, `exec`, `subprocess`,
+       acceso a red y filesystem, y las rechaza salvo autorización explícita
+       del contrato.
+
+El trabajo se ubica así en la intersección de tres áreas: lenguajes de
+programación (diseño del lenguaje de contratos embebido `@generate`),
+ingeniería de software (design by contract, verificación estática y dinámica,
+integración continua) y programación asistida por IA (síntesis de código con
+LLMs, ingeniería de prompts aumentados y taxonomías de fallo).
+
+
+================================================================================
+2. OBJETIVOS
+================================================================================
+
+Objetivo general
+------------------------------------------------------------------------------
+
+Diseñar e implementar un sistema de generación de código controlada por
+contratos que opere como un compilador determinista sobre especificaciones
+conductuales embebidas en el código fuente, con verificación multi-capa de la
+salida del modelo.
+
+
+Objetivos específicos
+------------------------------------------------------------------------------
+
+1. Diseñar el lenguaje de contratos embebido mediante el marcador `@generate`,
+   con secciones obligatorias — `behavior`, `examples`, `errors`,
+   `constraints` — y con separación clara entre la información derivable de la
+   firma (nombres de parámetros, tipos, valor de retorno) y la especificación
+   escrita por el desarrollador.
+
+2. Construir el pipeline de tipo compilador capaz de procesar funciones
+   anotadas: parseo, extracción de firma, validación de consistencia
+   firma-contrato, validación de completitud, validación de consistencia de
+   ejemplos, construcción del prompt aumentado, síntesis de la implementación
+   y generación independiente de tests mediante una llamada separada al
+   modelo.
+
+3. Implementar las compuertas de verificación utilizando herramientas
+   estándar del ecosistema Python:
+     - formateo (ruff format o black),
+     - análisis de estilo (ruff),
+     - verificación de tipos (mypy o pyright),
+     - ejecución de tests (pytest y eventualmente Hypothesis),
+     - análisis de complejidad (radon o lizard),
+     - análisis AST para detectar operaciones prohibidas (`eval`, `exec`,
+       `subprocess`, acceso a red, acceso al sistema de archivos), salvo
+       autorización explícita.
+
+4. Definir una taxonomía de errores de tipo compilador, con mensajes claros y
+   accionables:
+     - InconsistentPromptError
+     - IncompletePromptError
+     - MissingSamplesError
+     - PromptCannotSatisfyTestsError
+     - ExceededLintIterationsError
+     - ExceededTestIterationsError
+     - GeneratedCodeTooComplexError
+     - UnsafeGeneratedCodeError
+     - UnsupportedSignatureError
+
+5. Validar la propuesta mediante casos de estudio representativos — funciones
+   acotadas como `clamp`, `parse_port`, entre otras — evaluando cualitativa y
+   cuantitativamente si el sistema produce implementaciones correctas,
+   mantenibles, verificables y alineadas con los contratos definidos por el
+   desarrollador; y comparando su comportamiento contra la generación no
+   restringida por el mismo modelo, midiendo distribuciones de bugs análogas
+   a las de la taxonomía de Dou et al. (2024).
+
+
+================================================================================
+3. CRONOGRAMA
+================================================================================
+
+Se propone una distribución de 200 horas en 6 meses.
+
+  Mes 1
+    Revisión bibliográfica y estado del arte sobre síntesis de código con
+    LLMs, taxonomías de fallo (Wang et al. 2024; Dou et al. 2024), design by
+    contract, verificación estática y dinámica, y técnicas de lenguajes de
+    programación aplicadas a code generation (Du et al. 2025). Diseño del
+    lenguaje de contratos embebido `@generate`, de la taxonomía de errores y
+    del modelo de prompt aumentado. Definición de la arquitectura general del
+    sistema.
+
+  Mes 2
+    Implementación del frontend: parseo de fuentes Python, extracción de la
+    firma, validación de consistencia entre firma y contrato, validación de
+    completitud y consistencia de ejemplos.
+
+  Mes 3
+    Implementación del backend de síntesis: construcción del prompt
+    aumentado, integración con el proveedor de LLM y orquestación de llamadas
+    independientes para la generación de implementación y tests.
+
+  Mes 4
+    Implementación de las compuertas de verificación: formateo, linting,
+    tipado, testing y análisis de complejidad. Implementación del bucle de
+    reparación con presupuesto de reintentos acotado.
+
+  Mes 5
+    Implementación de la compuerta de seguridad mediante análisis AST de
+    operaciones prohibidas, del sistema de procedencia y del archivo de
+    bloqueo `cdcs.lock`. Desarrollo de casos de estudio y experimentación
+    sobre un conjunto representativo de funciones, con recolección de
+    métricas comparativas contra la generación no restringida.
+
+  Mes 6
+    Refinamiento, ajuste de umbrales y evaluación cualitativa de los
+    artefactos generados. Redacción del informe final, preparación de la
+    defensa y documentación del proyecto.
+
+  Fecha de inicio:                29 de junio.
+  Fecha estimada de finalización: 10 de diciembre.
+  Duración total estimada:        6 meses.
+
+
+================================================================================
+4. BIBLIOGRAFÍA
+================================================================================
+
+Fuentes primarias sobre fenómenos de fallo en LLMs
+------------------------------------------------------------------------------
+
+[1] Wang, Z., Zhou, Z., Song, D., Huang, Y., Chen, S., Ma, L., y Zhang, T.
+    (2024). "Where Do Large Language Models Fail When Generating Code?"
+    arXiv:2406.08731.
+    Estudio empírico sobre 558 soluciones incorrectas producidas por seis
+    LLMs sobre HumanEval; taxonomía de 13 características semánticas y 14
+    sintácticas de fallo; análisis del efecto de la longitud del prompt.
+
+[2] Dou, S., Jia, H., Wu, S., Zheng, H., Wu, M., Tao, Y., Zhang, M., Chai, M.,
+    Fan, J., Xi, Z., Zheng, R., Wu, Y., Wen, M., Gui, T., Zhang, Q., Qiu, X.,
+    y Huang, X. (2024). "What is Wrong with Your Code Generated by Large
+    Language Models? An Extensive Study." arXiv:2407.06153.
+    Taxonomía de bugs en código generado por nueve LLMs sobre cuatro
+    benchmarks — incluyendo RWPB, construido manualmente para evitar data
+    leakage. Categorías primarias: syntax, runtime, functional. Propone
+    además un método de mitigación por self-critique iterativo.
+
+[3] Du, Y., Wang, C., y Wang, H. (2025). "Position Paper: Programming
+    Language Techniques for Bridging LLM Code Generation Semantic Gaps."
+    arXiv:2507.09135.
+    Argumento de que las técnicas clásicas de lenguajes de programación
+    (representaciones intermedias, AST, CFG/DFG, sistemas de tipos, métodos
+    formales) son esenciales para cerrar la brecha semántica del código
+    generado por LLMs — lo cual constituye el fundamento teórico de la
+    aproximación de CDCS.
+
+
+Fuentes clásicas y de referencia
+------------------------------------------------------------------------------
+
+[4] Meyer, B. (1992). "Applying 'Design by Contract'." IEEE Computer,
+    25(10), 40-51.
+
+[5] Austin, J., Odena, A., Nye, M., Bosma, M., Michalewski, H., Dohan, D.,
+    Jiang, E., Cai, C., Terry, M., Le, Q., et al. (2021). "Program Synthesis
+    with Large Language Models." arXiv:2108.07732.
+
+[6] Jain, N., Vaidyanath, S., Iyer, S., Natarajan, N., Parthasarathy, S.,
+    Rajamani, S., y Sharma, R. (2022). "Jigsaw: Large Language Models meet
+    Program Synthesis." ICSE 2022.
+
+[7] Schäfer, M., Nadi, S., Eghbali, A., y Tip, F. (2023). "An Empirical
+    Evaluation of Using Large Language Models for Automated Unit Test
+    Generation (TestPilot)." IEEE Transactions on Software Engineering.
+
+[8] Liu, J., Xia, C. S., Wang, Y., y Zhang, L. (2023). "Is Your Code
+    Generated by ChatGPT Really Correct? Rigorous Evaluation of Large
+    Language Models for Code Generation." NeurIPS 2023.
+
+
+Herramientas y documentación de referencia
+------------------------------------------------------------------------------
+
+[9] Documentación oficial de Python 3.12, Ruff, Mypy, Pyright, Pytest,
+    Hypothesis y Radon.
+
+================================================================================

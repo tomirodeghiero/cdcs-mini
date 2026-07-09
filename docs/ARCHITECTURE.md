@@ -254,7 +254,7 @@ manual edits y contratos no regenerados quedan bloqueados en CI.
 | `synthesis/prompt.py`                             |    405 | `PromptBuilder`: arma el prompt aumentado (impl, test, repair)               |
 | `synthesis/orchestrator.py`                       |    407 | Bucle de síntesis + reparación, llamada separada para tests                  |
 | `synthesis/gates.py`                              |    580 | `GateChain` (structure, security, callee, complexity, externos)              |
-| `synthesis/llm.py`                                |    395 | `LLMClient` Protocol + 3 backends (Anthropic, Ollama, Pollinations)          |
+| `synthesis/llm.py`                                |    500 | `LLMClient` Protocol + 4 backends (Anthropic, Cerebras, Ollama, Pollinations) |
 | `synthesis/artifacts.py`                          |    394 | Emisión `.generated.py` + `cdcs.lock` + detección de drift                   |
 | `reporting/json_reporter.py`                      |    128 | Serializador determinista a JSON (orden fijo de claves)                      |
 | `application/report_service.py`                   |    108 | Compone `parsing` + `validation` para el modo *analyzer*                     |

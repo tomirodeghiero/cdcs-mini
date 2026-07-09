@@ -157,11 +157,12 @@ def test_synthesize_uses_pollinations_by_default_when_no_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Default factory must pick the keyless Pollinations backend when no
-    # explicit provider, no Anthropic key, and no local Ollama instance.
+    # explicit provider, no API keys of any kind, and no local Ollama.
     from cdcs.synthesis import llm as llm_module
     from cdcs.synthesis.llm import PollinationsClient, default_llm_client
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     monkeypatch.delenv("CDCS_LLM_PROVIDER", raising=False)
     # Pretend Ollama isn't running — otherwise the factory prefers it.
     monkeypatch.setattr(llm_module, "_ollama_is_reachable", lambda: False)
@@ -175,6 +176,32 @@ def test_synthesize_uses_anthropic_when_provider_explicit(
 
     monkeypatch.setenv("CDCS_LLM_PROVIDER", "anthropic")
     assert isinstance(default_llm_client(), AnthropicClient)
+
+
+def test_synthesize_uses_cerebras_when_provider_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cdcs.synthesis.llm import CerebrasClient, default_llm_client
+
+    monkeypatch.setenv("CDCS_LLM_PROVIDER", "cerebras")
+    client = default_llm_client()
+    assert isinstance(client, CerebrasClient)
+    assert client.model == "qwen-3-coder-480b"
+
+
+def test_synthesize_uses_cerebras_when_api_key_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With CEREBRAS_API_KEY set and no Anthropic key, factory should pick
+    # Cerebras before falling through to Ollama / Pollinations.
+    from cdcs.synthesis import llm as llm_module
+    from cdcs.synthesis.llm import CerebrasClient, default_llm_client
+
+    monkeypatch.delenv("CDCS_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("CEREBRAS_API_KEY", "sk-fake")
+    monkeypatch.setattr(llm_module, "_ollama_is_reachable", lambda: False)
+    assert isinstance(default_llm_client(), CerebrasClient)
 
 
 def test_synthesize_returns_upstream_diagnostics_when_contract_invalid() -> None:

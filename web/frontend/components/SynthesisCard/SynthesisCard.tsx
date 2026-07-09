@@ -334,8 +334,11 @@ function EmptyState() {
           Paste a contract on the left, switch to <strong>Synthesize</strong>, then press Generate.
         </div>
         <div className="pt-1 text-[11px] text-slate-400">
-          Backend resolves: <code className="font-mono">CDCS_LLM_PROVIDER</code> →{" "}
-          Anthropic (if key) → Ollama (if running) → Pollinations (keyless fallback).
+          Backend default:{" "}
+          <span className="font-mono text-slate-600 dark:text-slate-300">
+            Cerebras · qwen-3-coder-480b
+          </span>
+          . Override with <code className="font-mono">CDCS_LLM_PROVIDER</code>.
         </div>
       </div>
     </div>

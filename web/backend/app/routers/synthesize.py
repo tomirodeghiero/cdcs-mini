@@ -42,10 +42,14 @@ router = APIRouter(prefix="/synthesize", tags=["Synthesis"])
         "tests, in separate prompts per PDF §9), runs the verification gates, "
         "and returns the generated code in-memory.\n\n"
         "**LLM backend** is resolved at request time:\n"
-        "1. `CDCS_LLM_PROVIDER` env (`anthropic` / `ollama` / `pollinations`).\n"
+        "1. `CDCS_LLM_PROVIDER` env "
+        "(`anthropic` / `cerebras` / `ollama` / `pollinations`).\n"
         "2. `ANTHROPIC_API_KEY` in env → Anthropic Claude.\n"
-        "3. Local Ollama if `localhost:11434` is reachable.\n"
-        "4. Fallback: keyless **Pollinations.ai** (rate-limited)."
+        "3. `CEREBRAS_API_KEY` in env → Cerebras (Qwen 3 Coder 480B). "
+        "**Recommended for the public demo.**\n"
+        "4. Local Ollama if `localhost:11434` is reachable.\n"
+        "5. Fallback: keyless **Pollinations.ai** (anonymous tier is "
+        "rate-limited and only exposes GPT-OSS 20B)."
     ),
     responses={
         200: {"description": "Synthesis attempted. Per-function `status` says what happened."},

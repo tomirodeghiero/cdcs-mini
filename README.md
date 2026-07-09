@@ -176,22 +176,36 @@ cdcs check path/to/ports.py --dest path/to/
 El compilador y el endpoint HTTP `/synthesize/from-source` resuelven el
 backend en este orden:
 
-1. **`CDCS_LLM_PROVIDER`** explícito (`anthropic` / `ollama` / `pollinations`).
-2. **`ANTHROPIC_API_KEY`** en env → Anthropic Claude (mejor calidad).
-3. **Ollama local** en `localhost:11434` si está corriendo → recomendado
-   para defensa de tesis (offline, sin rate limits). Instalación:
+1. **`CDCS_LLM_PROVIDER`** explícito
+   (`anthropic` / `cerebras` / `ollama` / `pollinations`).
+2. **`ANTHROPIC_API_KEY`** en env → Anthropic Claude (máxima calidad, pago).
+3. **`CEREBRAS_API_KEY`** en env → **Cerebras · Qwen 3 Coder 480B**.
+   Recomendado para la demo pública: LLM de código a la par de GPT-4/Claude,
+   respuesta en pocos segundos, tier gratuito sin tarjeta. Sign up en
+   [cloud.cerebras.ai](https://cloud.cerebras.ai).
+4. **Ollama local** en `localhost:11434` si está corriendo → mejor opción
+   offline (sin rate limits). Instalación:
    `brew install ollama && ollama pull qwen2.5-coder:7b`.
-4. **Pollinations.ai** (default). Público, sin API key, sin signup. Buen
-   demo "fuera de la caja", pero rate-limited (~1 req cada 15 s a tier
-   anónimo) y a veces flaky en horarios pico — el cliente reintenta
-   automáticamente en 429/502/503/504.
+5. **Pollinations.ai** (fallback keyless). Público, sin API key, sin signup;
+   pero el tier anónimo hoy sólo expone `openai-fast` (GPT-OSS 20B) y está
+   rate-limitado a ~1 req cada 15 s — el cliente reintenta automáticamente
+   en 429/502/503/504.
 
 ```bash
 # Forzar un backend específico
-export CDCS_LLM_PROVIDER=anthropic CDCS_MODEL=claude-opus-4-7
-export CDCS_LLM_PROVIDER=ollama    CDCS_MODEL=qwen2.5-coder:7b
+export CDCS_LLM_PROVIDER=cerebras     CDCS_MODEL=qwen-3-coder-480b
+export CEREBRAS_API_KEY=csk-...       # obtener en cloud.cerebras.ai
+
+export CDCS_LLM_PROVIDER=anthropic    CDCS_MODEL=claude-opus-4-7
+export CDCS_LLM_PROVIDER=ollama       CDCS_MODEL=qwen2.5-coder:7b
 export CDCS_LLM_PROVIDER=pollinations CDCS_MODEL=openai-fast
 ```
+
+**Deploy en Vercel:** en el proyecto `cdcs-mini-api` (Settings → Environment
+Variables) añadir `CEREBRAS_API_KEY` y opcionalmente
+`CDCS_LLM_PROVIDER=cerebras`. No hace falta más — el backend levanta con esas
+env vars y la UI muestra el modelo activo en el badge de cada función
+sintetizada.
 
 Códigos de salida: `0` = limpio · `1` = diagnósticos/drift detectados ·
 `2` = error de uso.
