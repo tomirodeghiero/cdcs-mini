@@ -20,6 +20,10 @@ source.py
 > 📄 **Para la lectura detallada de decisiones
 > arquitectónicas, ver el PDF**:
 > [`docs/cdcs_mini_tesis_unrc.pdf`](docs/cdcs_mini_tesis_unrc.pdf).
+>
+> Para una vista de pájaro del código (capas, módulos, reglas de
+> dependencia, decisiones de diseño y métricas de testing) ver
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 

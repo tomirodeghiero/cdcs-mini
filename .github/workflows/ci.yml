@@ -39,8 +39,21 @@ jobs:
       - name: yamllint
         run: uv run yamllint -s .github .yamllint
 
-      - name: pytest
-        run: uv run pytest
+      - name: pytest + coverage (fail under 80%)
+        run: |
+          uv run pytest \
+              --cov=src/cdcs_mini \
+              --cov-report=term-missing \
+              --cov-report=xml:out/coverage.xml \
+              --cov-fail-under=80
+
+      - name: Upload coverage XML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: out/coverage.xml
+          if-no-files-found: ignore
 
       # Radon is informational on this branch — surface complexity hotspots
       # without failing the pipeline until the team agrees on a hard limit.

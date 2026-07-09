@@ -37,7 +37,7 @@ from cdcs_mini.synthesis.prompt import PromptBuilder
 def select_adapter(filename: str) -> LanguageAdapter:
     """Pick the language adapter for a request based on the filename.
 
-    Mirrors :func:`cdcs_mini.cli._select_adapter` so the HTTP layer and
+    Mirrors :func:`cdcs_mini.cli.select_adapter` so the HTTP layer and
     the CLI agree on how an upload becomes a language. Unknown
     extensions fall back to Python.
     """

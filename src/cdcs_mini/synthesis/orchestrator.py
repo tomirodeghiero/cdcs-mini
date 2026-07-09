@@ -74,6 +74,30 @@ class _RunState:
 
 
 @dataclass(frozen=True, slots=True)
+class _ImplIteration:
+    """Result of one implementation-synthesis iteration.
+
+    Exactly one of ``failures`` or ``error`` carries information when the
+    iteration is *not* a success:
+
+    * ``failures`` is non-empty when the LLM responded but its output did
+      not survive parse/gate checks. The orchestrator may try to repair.
+    * ``error`` is set when the LLM call itself blew up (network, auth,
+      provider outage). No repair is attempted in that case.
+
+    On success both are empty and ``code`` carries the accepted output.
+    """
+
+    code: str
+    failures: tuple[GateFailure, ...] = ()
+    error: SynthesisFailure | None = None
+
+    @property
+    def passed(self) -> bool:
+        return self.error is None and not self.failures
+
+
+@dataclass(frozen=True, slots=True)
 class SynthesisOrchestrator:
     llm: LLMClient
     policy: SynthesisPolicy = field(default_factory=SynthesisPolicy.strict_default)
@@ -155,54 +179,36 @@ class SynthesisOrchestrator:
         contract: Contract,
         state: _RunState,
     ) -> str | SynthesisFailure:
+        """Run the impl synthesis loop with up to ``N`` repair attempts.
+
+        Each iteration is delegated to :meth:`_run_impl_iteration`, which
+        keeps the LLM-call + parse + gate-chain plumbing in one place;
+        this method only owns the *control flow* — when to stop, when to
+        repair, when to give up.
+        """
         prompt = self.prompt_builder.build_implementation_prompt(
             target=target, signature=signature, contract=contract
         )
-        last_code = ""
-        last_failures: tuple[GateFailure, ...] = ()
-        for attempt in range(self.policy.max_repair_iterations + 1):
-            try:
-                raw = self.llm.complete(prompt)
-            except LLMError as exc:
-                return SynthesisFailure(
-                    target=target,
-                    code=DiagnosticCode.LLM_CALL_FAILED,
-                    message=f"LLM call failed: {exc}",
-                )
-            state.llm_calls += 1
-            raw = _strip_markdown_fence(raw)
-            tree, parse_failure = self.code_parser(raw)
-            if tree is None:
-                last_code = raw
-                last_failures = (
-                    GateFailure(gate="parse", message=parse_failure or "syntax error"),
-                )
-            else:
-                candidate = Candidate(
-                    code=raw,
-                    tree=tree,
-                    target=target,
-                    signature=signature,
-                    contract=contract,
-                    policy=self.policy,
-                )
-                report = self.gate_chain.run(candidate)
-                if report.passed:
-                    return raw
-                last_code = raw
-                last_failures = report.failures
-            # Out of attempts → bail. Distinguish complexity from generic
-            # gate failure so the diagnostic code matches PDF §8.
-            if attempt == self.policy.max_repair_iterations:
-                return _failure_from_gate_report(target, last_failures)
-            # Build a repair prompt for the next iteration
-            failures_text = "\n".join(f.format() for f in last_failures)
+        budget = self.policy.max_repair_iterations
+        last = _ImplIteration(code="")
+        for attempt in range(budget + 1):
+            last = self._run_impl_iteration(
+                prompt, target=target, signature=signature, contract=contract, state=state
+            )
+            if last.error is not None:
+                return last.error
+            if last.passed:
+                return last.code
+            if attempt == budget:
+                # Distinguish complexity / security from a generic lint
+                # failure so the diagnostic code matches PDF §8.
+                return _failure_from_gate_report(target, last.failures)
             prompt = self.prompt_builder.build_repair_prompt(
                 target=target,
                 signature=signature,
                 contract=contract,
-                previous_code=last_code,
-                failures=failures_text,
+                previous_code=last.code,
+                failures="\n".join(f.format() for f in last.failures),
             )
             state.repair_attempts += 1
         # Unreachable: the loop returns or fails by attempt N
@@ -211,6 +217,51 @@ class SynthesisOrchestrator:
             code=DiagnosticCode.EXCEEDED_LINT_ITERATIONS,
             message="repair loop exited without producing code",
         )
+
+    def _run_impl_iteration(
+        self,
+        prompt: Prompt,
+        *,
+        target: PromptTarget,
+        signature: Signature,
+        contract: Contract,
+        state: _RunState,
+    ) -> _ImplIteration:
+        """Single impl iteration: LLM → parse → gate chain.
+
+        Pure plumbing — the loop in :meth:`_synthesize_implementation`
+        decides what to do with the result. Side effect: increments
+        ``state.llm_calls`` once per call.
+        """
+        try:
+            raw = self.llm.complete(prompt)
+        except LLMError as exc:
+            return _ImplIteration(
+                code="",
+                error=SynthesisFailure(
+                    target=target,
+                    code=DiagnosticCode.LLM_CALL_FAILED,
+                    message=f"LLM call failed: {exc}",
+                ),
+            )
+        state.llm_calls += 1
+        raw = _strip_markdown_fence(raw)
+        tree, parse_failure = self.code_parser(raw)
+        if tree is None:
+            return _ImplIteration(
+                code=raw,
+                failures=(GateFailure(gate="parse", message=parse_failure or "syntax error"),),
+            )
+        candidate = Candidate(
+            code=raw,
+            tree=tree,
+            target=target,
+            signature=signature,
+            contract=contract,
+            policy=self.policy,
+        )
+        report = self.gate_chain.run(candidate)
+        return _ImplIteration(code=raw, failures=report.failures)
 
     # --- test loop --------------------------------------------------
 

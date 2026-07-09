@@ -31,7 +31,10 @@ class ReportService:
         return cls(
             source_parser=active.source_parser,
             dsl_parser=DSLParser(expression_parser=active.expression_parser),
-            validators=default_validators(active.known_globals),
+            validators=default_validators(
+                active.known_globals,
+                receiver_name=active.receiver_parameter_name,
+            ),
         )
 
     def build_report(self, source: str, *, filename: str = "<input>") -> Report:

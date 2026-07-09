@@ -28,7 +28,10 @@ def _ts_report(source: str, *, filename: str) -> Report:
     service = ReportService(
         source_parser=TypeScriptSourceParser(),
         dsl_parser=DSLParser(expression_parser=adapter.expression_parser),
-        validators=default_validators(adapter.known_globals),
+        validators=default_validators(
+            adapter.known_globals,
+            receiver_name=adapter.receiver_parameter_name,
+        ),
     )
     return service.build_report(source, filename=filename)
 

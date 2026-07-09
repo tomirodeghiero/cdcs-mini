@@ -23,7 +23,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=7.0",
     "pytest-mock>=3.14",
+    "hypothesis>=6.100",
     "mypy>=1.10",
     "ruff>=0.5",
     "httpx>=0.27",
@@ -51,7 +53,9 @@ packages = ["src/cdcs_mini"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=7.0",
     "pytest-mock>=3.14",
+    "hypothesis>=6.100",
     "mypy>=1.10",
     "ruff>=0.5",
     "httpx>=0.27",
@@ -164,6 +168,35 @@ docstring-code-format = false
 cc-min = "A"
 mi-min = "A"
 exclude = "tests/fixtures/*,**/__pycache__/*"
+
+# ---------------------------------------------------------------------------
+# coverage.py — used by pytest-cov. Threshold lives in the Makefile/CI so
+# that subset test runs (e.g. `pytest tests/synthesis -k orchestrator`)
+# don't spuriously fail. The package-level floor is enforced by
+# `make coverage` and the `coverage` step in .github/workflows/ci.yml.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["src/cdcs_mini"]
+omit = [
+    "src/cdcs_mini/__main__.py",  # delegates to cli.main; covered indirectly
+    "tests/fixtures/*",
+]
+parallel = false
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",  # Protocol method stubs
+]
+
+[tool.coverage.html]
+directory = "out/coverage-html"
 
 [tool.vercel]
 entrypoint = "api/index.py"

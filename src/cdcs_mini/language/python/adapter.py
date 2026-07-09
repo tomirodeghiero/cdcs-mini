@@ -42,4 +42,5 @@ class PythonAdapter:
     expression_parser: PythonExpressionParser = field(default_factory=PythonExpressionParser)
     source_parser: SourceParser = field(default_factory=SourceParser)
     known_globals: frozenset[str] = field(default_factory=lambda: _PYTHON_KNOWN_GLOBALS)
+    receiver_parameter_name: str = "self"
     prompt_profile: LanguageProfile = PYTHON_PROFILE

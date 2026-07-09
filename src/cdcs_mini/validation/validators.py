@@ -207,34 +207,66 @@ def _raises_example_key(raw: str) -> tuple[str, str] | None:
 # --- callable surface (Calls/Reads consistency) -----------------------
 
 
+# The DSL always uses ``self.`` as the receiver-prefix in calls/reads
+# (PDF §4). The actual parameter name on the host function varies per
+# language — Python uses ``self``, TypeScript uses ``this``. The
+# validator translates the DSL keyword to the host receiver via the
+# adapter's ``receiver_parameter_name``.
+DSL_RECEIVER_PREFIX: Final[str] = "self."
+
+
+def make_callable_surface_validator(receiver_name: str) -> ContractValidator:
+    """Bind ``validate_callable_surface`` to a host receiver name.
+
+    Returns a :class:`ContractValidator` closure that enforces the
+    Calls/Reads consistency rules — the DSL keyword ``self.X`` resolves
+    to ``receiver_name`` when checking the function's first parameter.
+    """
+
+    def _validate(
+        *, signature: Signature, contract: Contract, function_line: int
+    ) -> Iterable[Diagnostic]:
+        _ = function_line
+        diagnostics: list[Diagnostic] = []
+        has_receiver = _has_receiver_parameter(signature, receiver_name)
+        seen: dict[str, int] = {}
+        for spec in contract.calls:
+            diagnostics.extend(_check_callable_spec(spec, has_receiver, seen, receiver_name))
+        diagnostics.extend(_check_attribute_specs(contract.reads, has_receiver, receiver_name))
+        return diagnostics
+
+    return _validate
+
+
 def validate_callable_surface(
     *, signature: Signature, contract: Contract, function_line: int
 ) -> Iterable[Diagnostic]:
-    """Check Calls/Reads against the function signature.
+    """Backwards-compatible Python-default callable-surface validator.
+
+    New language adapters should use :func:`make_callable_surface_validator`
+    via :func:`default_validators` so the receiver name is host-aware.
 
     Rules enforced here (the syntactic well-formedness happens earlier
     in the DSL parser):
 
     * No duplicate ``qualified_name`` in ``Calls:``.
-    * ``self.X`` only allowed if the function declares a ``self`` parameter.
+    * ``self.X`` only allowed if the function declares a receiver.
     * Same rule for ``Reads:``.
     """
-    _ = function_line
-    diagnostics: list[Diagnostic] = []
-    has_self = _has_self_parameter(signature)
-    seen: dict[str, int] = {}
-    for spec in contract.calls:
-        diagnostics.extend(_check_callable_spec(spec, has_self, seen))
-    diagnostics.extend(_check_attribute_specs(contract.reads, has_self))
-    return diagnostics
+    return make_callable_surface_validator("self")(
+        signature=signature, contract=contract, function_line=function_line
+    )
 
 
-def _has_self_parameter(signature: Signature) -> bool:
-    return bool(signature.parameters) and signature.parameters[0].name == "self"
+def _has_receiver_parameter(signature: Signature, receiver_name: str) -> bool:
+    return bool(signature.parameters) and signature.parameters[0].name == receiver_name
 
 
 def _check_callable_spec(
-    spec: CallableSpec, has_self: bool, seen: dict[str, int]
+    spec: CallableSpec,
+    has_receiver: bool,
+    seen: dict[str, int],
+    receiver_name: str,
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
     if spec.qualified_name in seen:
@@ -250,14 +282,14 @@ def _check_callable_spec(
         )
     else:
         seen[spec.qualified_name] = spec.line
-    if spec.qualified_name.startswith("self.") and not has_self:
+    if spec.qualified_name.startswith(DSL_RECEIVER_PREFIX) and not has_receiver:
         diagnostics.append(
             Diagnostic(
                 line=spec.line,
                 code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
                 message=(
                     f"self-qualified callee {spec.qualified_name!r} "
-                    "but function has no 'self' parameter"
+                    f"but function has no {receiver_name!r} parameter"
                 ),
             )
         )
@@ -265,7 +297,9 @@ def _check_callable_spec(
 
 
 def _check_attribute_specs(
-    reads: tuple[AttributeReadSpec, ...], has_self: bool
+    reads: tuple[AttributeReadSpec, ...],
+    has_receiver: bool,
+    receiver_name: str,
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
     seen: dict[str, int] = {}
@@ -283,14 +317,14 @@ def _check_attribute_specs(
             )
         else:
             seen[spec.qualified_name] = spec.line
-        if spec.qualified_name.startswith("self.") and not has_self:
+        if spec.qualified_name.startswith(DSL_RECEIVER_PREFIX) and not has_receiver:
             diagnostics.append(
                 Diagnostic(
                     line=spec.line,
                     code=DiagnosticCode.INCONSISTENT_CALLABLE_SURFACE,
                     message=(
                         f"self-qualified attribute {spec.qualified_name!r} "
-                        "but function has no 'self' parameter"
+                        f"but function has no {receiver_name!r} parameter"
                     ),
                 )
             )
@@ -386,18 +420,26 @@ DEFAULT_VALIDATORS: Final[tuple[ContractValidator, ...]] = (
 )
 
 
-def default_validators(known_globals: frozenset[str]) -> tuple[ContractValidator, ...]:
+def default_validators(
+    known_globals: frozenset[str],
+    *,
+    receiver_name: str = "self",
+) -> tuple[ContractValidator, ...]:
     """Assemble the default validator chain bound to a language's globals.
 
     The shape and order of the chain stays identical to
-    :data:`DEFAULT_VALIDATORS`; only ``validate_known_parameters`` swaps
-    its Python-builtin set for whatever the adapter exposes. Callers that
-    don't care about language can keep using ``DEFAULT_VALIDATORS``.
+    :data:`DEFAULT_VALIDATORS`. Two validators are bound to host-language
+    facts: ``validate_known_parameters`` swaps its Python-builtin set
+    for the adapter's globals, and ``validate_callable_surface`` swaps
+    its ``self`` receiver for the adapter's
+    :attr:`~cdcs_mini.language.base.LanguageAdapter.receiver_parameter_name`
+    (``"this"`` for TypeScript). Callers that don't care about language
+    can keep using ``DEFAULT_VALIDATORS``.
     """
     return (
         validate_examples_present,
         make_known_parameters_validator(known_globals),
         validate_examples_consistency,
-        validate_callable_surface,
+        make_callable_surface_validator(receiver_name),
         validate_completeness,
     )

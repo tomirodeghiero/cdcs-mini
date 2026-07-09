@@ -128,6 +128,18 @@ class LanguageAdapter(Protocol):
         ...
 
     @property
+    def receiver_parameter_name(self) -> str:
+        """Host-language name for the implicit instance receiver.
+
+        The DSL always writes ``self.X`` in ``calls:``/``reads:`` as the
+        canonical receiver-prefix (PDF §4). The validator translates
+        that to the host language's actual receiver — ``"self"`` for
+        Python, ``"this"`` for TypeScript — when checking that the
+        function's signature actually declares one.
+        """
+        ...
+
+    @property
     def prompt_profile(self) -> LanguageProfile:
         """Text fragments / renderers the prompt builder needs.
 

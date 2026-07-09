@@ -10,8 +10,12 @@ YAML_PATHS := .yamllint .github
 
 TS_RUNTIME_DIR := ts-runtime
 
+# Branch-coverage floor. Current baseline is ~81%; bumped to 85% after
+# the cli refactor moves untestable rich-rendering code behind a Protocol.
+COVERAGE_MIN ?= 80
+
 .PHONY: help install lock sync lint format format-check typecheck test test-fast \
-        yaml complexity maintainability quality clean \
+        coverage coverage-html yaml complexity maintainability quality clean \
         ts-install ts-test ts-lint ts-typecheck ts-quality
 
 help:  ## List available targets
@@ -43,6 +47,19 @@ test:  ## Full pytest suite
 test-fast:  ## pytest stopping on first failure
 	$(UV) run pytest -x --ff
 
+coverage:  ## pytest with coverage, enforcing COVERAGE_MIN (default $(COVERAGE_MIN)%)
+	$(UV) run pytest \
+	    --cov=src/cdcs_mini \
+	    --cov-report=term-missing \
+	    --cov-fail-under=$(COVERAGE_MIN)
+
+coverage-html:  ## pytest with coverage and HTML report under out/coverage-html/
+	$(UV) run pytest \
+	    --cov=src/cdcs_mini \
+	    --cov-report=term-missing \
+	    --cov-report=html \
+	    --cov-fail-under=$(COVERAGE_MIN)
+
 yaml:  ## yamllint over project YAML
 	@if find $(YAML_PATHS) -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | grep -q .; then \
 		$(UV) run yamllint -s $(YAML_PATHS); \
@@ -56,7 +73,7 @@ complexity:  ## Cyclomatic complexity report (radon cc)
 maintainability:  ## Maintainability index (radon mi)
 	$(UV) run radon mi -s src web api
 
-quality: lint format-check typecheck yaml test  ## Everything CI runs (Python side)
+quality: lint format-check typecheck yaml coverage  ## Everything CI runs (Python side)
 
 # --- ts-runtime (Node workspace) -----------------------------------
 ts-install:  ## Install the ts-runtime Node workspace

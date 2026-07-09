@@ -84,4 +84,9 @@ class TypeScriptAdapter:
     )
     source_parser: TypeScriptSourceParser = field(default_factory=TypeScriptSourceParser)
     known_globals: frozenset[str] = field(default_factory=lambda: _TS_GLOBAL_VALUES)
+    # TypeScript class methods use ``this`` as the receiver. The DSL keeps
+    # writing ``self.X`` in ``calls:``/``reads:`` to stay language-neutral
+    # — the validator translates that to ``this`` when checking the
+    # function's first parameter against the contract.
+    receiver_parameter_name: str = "this"
     prompt_profile: LanguageProfile = TYPESCRIPT_PROFILE
